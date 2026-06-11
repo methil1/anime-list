@@ -19,6 +19,7 @@
     --accent-glow: rgba(124, 92, 255, 0.4);
     --done: #34d399;
     --watching: #fbbf24;
+    --maybe: #38bdf8;
     --radius: 12px;
     --radius-sm: 8px;
     --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;
@@ -51,6 +52,7 @@
   .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
+  .stat.maybe .num { color: var(--maybe); }
   .collection-bar { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   body.hide-scores .poster .score { display: none; }
 
@@ -76,6 +78,7 @@
   .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 14px -4px var(--accent-glow); }
   .chip.done.active { background: var(--done); border-color: var(--done); color: #06281c; box-shadow: 0 4px 14px -4px rgba(52,211,153,.4); }
   .chip.watching.active { background: var(--watching); border-color: var(--watching); color: #3a2c05; box-shadow: 0 4px 14px -4px rgba(251,191,36,.4); }
+  .chip.maybe.active { background: var(--maybe); border-color: var(--maybe); color: #07263b; box-shadow: 0 4px 14px -4px rgba(56,189,248,.4); }
 
   /* Year nav */
   .yearbar {
@@ -121,6 +124,7 @@
   .poster:hover { transform: translateY(-3px); box-shadow: 0 12px 26px -12px rgba(0,0,0,.8); }
   .poster.done { border-color: var(--done); }
   .poster.watching { border-color: var(--watching); }
+  .poster.maybe { border-color: var(--maybe); }
   .poster .img { aspect-ratio: 2/3; width: 100%; object-fit: cover; display: block; background: var(--bg-elev); }
   .poster .noimg { aspect-ratio: 2/3; display: grid; place-items: center; color: var(--text-faint); font-size: 0.8rem; padding: 10px; text-align: center; }
 
@@ -141,7 +145,9 @@
   .poster .status { position: absolute; top: 7px; right: 7px; width: 26px; height: 26px; border-radius: 50%; display: none; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
   .poster.done .status { display: grid; background: var(--done); color: #06281c; }
   .poster.watching .status { display: grid; background: var(--watching); color: #3a2c05; }
+  .poster.maybe .status { display: grid; background: var(--maybe); color: #07263b; }
   .poster .status svg { width: 15px; height: 15px; }
+  .poster .status .qmark { font-weight: 800; font-size: 15px; line-height: 1; }
   .poster .score { position: absolute; top: 7px; left: 7px; background: rgba(8,9,12,.78); color: #fcd34d; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
 
   /* empty / loading */
@@ -188,6 +194,7 @@
       <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
       <button class="chip done" data-f="done" onclick="setFilter('done')">視聴済</button>
       <button class="chip watching" data-f="watching" onclick="setFilter('watching')">視聴中</button>
+      <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
       <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
     </div>
   </div>
@@ -227,8 +234,8 @@ const WATCH_KEY = "animeTV.watch.v1";
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
-const STATUS_NEXT = { unwatched: "watching", watching: "done", done: "unwatched" };
-const STATUS_JA = { done: "視聴済", watching: "視聴中", unwatched: "未マーク" };
+const STATUS_NEXT = { unwatched: "watching", watching: "done", done: "maybe", maybe: "unwatched" };
+const STATUS_JA = { done: "視聴済", watching: "視聴中", maybe: "多分視聴済", unwatched: "未マーク" };
 
 let catalog = [];
 let years = [];
@@ -335,11 +342,12 @@ function passStatus(a) {
 
 /* ---------- stats ---------- */
 function renderStats() {
-  let done = 0, watching = 0;
-  for (const id in watch) { if (watch[id] === "done") done++; else if (watch[id] === "watching") watching++; }
+  let done = 0, watching = 0, maybe = 0;
+  for (const id in watch) { const v = watch[id]; if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; }
   document.getElementById("stats").innerHTML = `
     <div class="stat done"><span class="num">${done}</span><span class="lbl">視聴済</span></div>
     <div class="stat watching"><span class="num">${watching}</span><span class="lbl">視聴中</span></div>
+    <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>
     <div class="stat"><span class="num">${catalog.length.toLocaleString()}</span><span class="lbl">カタログ作品</span></div>`;
 }
 
@@ -417,11 +425,12 @@ function posterHtml(a) {
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
-  return `<article class="poster ${st}" onclick="cycle(${a.id})" title="${esc(a.t)} ／ クリックで 視聴中→視聴済→未マーク を切替">
+  return `<article class="poster ${st}" onclick="cycle(${a.id})" title="${esc(a.t)} ／ クリックで 視聴中→視聴済→多分視聴済→未マーク を切替">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
     <span class="status">${st === "done"
       ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+      : st === "maybe" ? '<span class="qmark">?</span>'
       : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}</span>
     <div class="meta">
       <div class="ttl">${esc(a.t)}</div>
@@ -441,8 +450,9 @@ function cycle(id) {
   if (next === "unwatched") delete watch[id]; else watch[id] = next;
   saveWatch();
   renderStats();
-  if (view.mode === "collection") render();
-  else updatePoster(id);
+  // 視聴コレクション表示中も、未視聴に戻した作品はその場では消さずポスターのみ更新（誤クリック対策）。
+  // 次回のページ偏移（年タブ/コレクション/検索など）で再描画され、自然に除外される。
+  updatePoster(id);
   toast(STATUS_JA[next] + " にしました");
 }
 function updatePoster(id) {
@@ -530,9 +540,9 @@ function exportImage() {
     yy += yearHeadH;
     for (const a of byYear[y]) {
       const st = statusOf(a.id);
-      ctx.fillStyle = st === "done" ? "#34d399" : "#fbbf24";
+      ctx.fillStyle = st === "done" ? "#34d399" : st === "maybe" ? "#38bdf8" : "#fbbf24";
       ctx.font = `700 15px ${JP}`;
-      ctx.fillText(st === "done" ? "✓" : "▶", pad, yy + 16);
+      ctx.fillText(st === "done" ? "✓" : st === "maybe" ? "?" : "▶", pad, yy + 16);
       ctx.fillStyle = "#e8eaef"; ctx.font = `400 16px ${JP}`;
       let title = a.t;
       const maxW = W - pad * 2 - 90;
