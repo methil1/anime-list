@@ -456,7 +456,7 @@ function posterHtml(a) {
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
-  return `<article class="poster ${st}" onclick="cycle(${a.id})" title="${esc(a.t)} ／ クリックで 視聴中→視聴済→多分視聴済→未マーク を切替">
+  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return openWiki(event,${a.id})" title="${esc(a.t)} ／ クリックで視聴区分切替 ／ 右クリックでWikipedia">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
     <span class="status">${st === "done"
@@ -485,6 +485,18 @@ function cycle(id) {
   // 次回のページ偏移（年タブ/コレクション/検索など）で再描画され、自然に除外される。
   updatePoster(id);
   toast(STATUS_JA[next] + " にしました");
+}
+/* ---------- Wikipedia (右クリック) ---------- */
+function wikiUrl(a) {
+  // 日本語Wikipediaをタイトルで検索（完全一致なら記事へ直行、無ければ検索結果）
+  const q = encodeURIComponent(a.t || a.tr || "");
+  return `https://ja.wikipedia.org/wiki/Special:Search?search=${q}&go=Go`;
+}
+function openWiki(e, id) {
+  e.preventDefault();
+  const a = catalog.find(x => x.id === id);
+  if (a) window.open(wikiUrl(a), "_blank", "noopener");
+  return false;
 }
 function updatePoster(id) {
   const a = catalog.find(x => x.id === id);
