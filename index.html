@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TVアニメ視聴カタログ</title>
+<style>
+  :root {
+    --bg: #0d0e12;
+    --bg-elev: #15171e;
+    --bg-card: #1a1d26;
+    --border: #272b36;
+    --border-strong: #3a3f4d;
+    --text: #e8eaef;
+    --text-dim: #9aa0ad;
+    --text-faint: #5f6675;
+    --accent: #7c5cff;
+    --accent-soft: #a48bff;
+    --accent-glow: rgba(124, 92, 255, 0.4);
+    --done: #34d399;
+    --watching: #fbbf24;
+    --radius: 12px;
+    --radius-sm: 8px;
+    --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: var(--font);
+    background:
+      radial-gradient(1200px 600px at 85% -10%, rgba(124, 92, 255, 0.12), transparent 60%),
+      var(--bg);
+    color: var(--text);
+    min-height: 100vh;
+    line-height: 1.5;
+    -webkit-font-smoothing: antialiased;
+  }
+  .wrap { max-width: 1280px; margin: 0 auto; padding: 0 20px 100px; }
+
+  /* Header */
+  header { padding: 40px 0 18px; }
+  .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+  h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
+  .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
+  .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
+
+  .stats { display: flex; gap: 22px; margin-top: 22px; flex-wrap: wrap; }
+  .stat { display: flex; flex-direction: column; }
+  .stat .num { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
+  .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat.done .num { color: var(--done); }
+  .stat.watching .num { color: var(--watching); }
+
+  /* Toolbar */
+  .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 26px; }
+  .toolbar .tlabel { color: var(--text-faint); font-size: 0.78rem; }
+  .search { flex: 1; min-width: 200px; position: relative; }
+  .search input {
+    width: 100%; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text);
+    padding: 11px 14px 11px 40px; border-radius: var(--radius-sm); font-size: 0.95rem; font-family: inherit;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-faint); }
+
+  .chips { display: flex; gap: 7px; flex-wrap: wrap; }
+  .chip {
+    background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    padding: 9px 13px; border-radius: 999px; font-size: 0.83rem; cursor: pointer; font-family: inherit;
+    transition: all .15s; white-space: nowrap;
+  }
+  .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 14px -4px var(--accent-glow); }
+  .chip.done.active { background: var(--done); border-color: var(--done); color: #06281c; box-shadow: 0 4px 14px -4px rgba(52,211,153,.4); }
+  .chip.watching.active { background: var(--watching); border-color: var(--watching); color: #3a2c05; box-shadow: 0 4px 14px -4px rgba(251,191,36,.4); }
+
+  /* Year nav */
+  .yearbar {
+    display: flex; gap: 6px; overflow-x: auto; margin-top: 22px; padding-bottom: 6px;
+    scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
+  }
+  .yearbar::-webkit-scrollbar { height: 6px; }
+  .yearbar::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .ytab {
+    background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    padding: 8px 14px; border-radius: var(--radius-sm); font-size: 0.9rem; cursor: pointer; font-family: inherit;
+    white-space: nowrap; font-variant-numeric: tabular-nums; transition: all .12s; font-weight: 600;
+  }
+  .ytab:hover { color: var(--text); border-color: var(--border-strong); }
+  .ytab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+  .ytab.collection { color: var(--accent-soft); border-color: var(--border-strong); }
+  .ytab.collection.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .yearbar-label { color: var(--text-faint); font-size: 0.78rem; margin: 40px 0 -10px; }
+
+  /* Section headings */
+  .year-block { margin-top: 40px; }
+  .year-head { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .cour { margin-top: 26px; }
+  .cour-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 9px; margin-bottom: 16px; }
+  .cour-head .season { font-size: 1.15rem; font-weight: 700; }
+  .cour-head .count { color: var(--text-faint); font-size: 0.82rem; }
+  .cour-head .line { flex: 1; }
+  .s-winter { color: #7dd3fc; }
+  .s-spring { color: #f9a8d4; }
+  .s-summer { color: #fcd34d; }
+  .s-fall   { color: #fdba74; }
+  .s-movie  { color: #c4b5fd; }
+
+  /* Poster grid */
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
+  .poster {
+    position: relative; cursor: pointer; border-radius: var(--radius); overflow: hidden;
+    background: var(--bg-card); border: 2px solid var(--border);
+    transition: transform .15s, border-color .15s, box-shadow .15s;
+    user-select: none;
+  }
+  .poster:hover { transform: translateY(-3px); box-shadow: 0 12px 26px -12px rgba(0,0,0,.8); }
+  .poster.done { border-color: var(--done); }
+  .poster.watching { border-color: var(--watching); }
+  .poster .img { aspect-ratio: 2/3; width: 100%; object-fit: cover; display: block; background: var(--bg-elev); }
+  .poster .noimg { aspect-ratio: 2/3; display: grid; place-items: center; color: var(--text-faint); font-size: 0.8rem; padding: 10px; text-align: center; }
+
+  .poster .meta {
+    position: absolute; inset: auto 0 0 0; padding: 22px 9px 9px;
+    background: linear-gradient(transparent, rgba(8,9,12,.95)55%);
+  }
+  .poster .ttl { font-size: 0.82rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  .poster .sub { font-size: 0.68rem; color: var(--text-dim); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+  .poster .ep { font-variant-numeric: tabular-nums; }
+  .poster .multi { background: var(--accent); color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
+  .poster .fmt { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
+  .poster .fmt.short { background: #0e7490; color: #cffafe; }
+  .poster .fmt.movie { background: #7c3aed; color: #fff; }
+
+  /* status corner */
+  .poster .status { position: absolute; top: 7px; right: 7px; width: 26px; height: 26px; border-radius: 50%; display: none; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .poster.done .status { display: grid; background: var(--done); color: #06281c; }
+  .poster.watching .status { display: grid; background: var(--watching); color: #3a2c05; }
+  .poster .status svg { width: 15px; height: 15px; }
+  .poster .score { position: absolute; top: 7px; left: 7px; background: rgba(8,9,12,.78); color: #fcd34d; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+
+  /* empty / loading */
+  .notice { text-align: center; padding: 80px 20px; color: var(--text-faint); }
+  .notice .big { font-size: 2.6rem; margin-bottom: 10px; }
+  .notice code { background: var(--bg-elev); padding: 2px 8px; border-radius: 6px; color: var(--accent-soft); }
+
+  .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
+  .foot-note a { color: var(--text-dim); cursor: pointer; text-decoration: underline; }
+
+  /* toast */
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: 0 12px 30px -10px rgba(0,0,0,.7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="title-row">
+      <div>
+        <h1>TV<span class="accent">アニメ</span>カタログ</h1>
+        <p class="subtitle">クール・劇場公開ごとのタイトルから、見た作品をマークしていく</p>
+        <p class="src-note" id="src-note"></p>
+      </div>
+    </div>
+    <div class="stats" id="stats"></div>
+  </header>
+
+  <div class="toolbar">
+    <div class="search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
+      <input type="text" id="search" placeholder="作品名で検索（全年代）..." oninput="onSearch()">
+    </div>
+    <div class="chips" id="filters">
+      <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
+      <button class="chip done" data-f="done" onclick="setFilter('done')">視聴済</button>
+      <button class="chip watching" data-f="watching" onclick="setFilter('watching')">視聴中</button>
+      <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
+    </div>
+  </div>
+
+  <div class="toolbar" style="margin-top:10px">
+    <span class="tlabel">形式</span>
+    <div class="chips" id="formatfilters">
+      <button class="chip active" data-ff="all" onclick="setFormat('all')">すべて</button>
+      <button class="chip" data-ff="TV" onclick="setFormat('TV')">TV</button>
+      <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
+      <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場版</button>
+    </div>
+  </div>
+
+  <div class="yearbar" id="yearbar"></div>
+
+  <div id="list"></div>
+
+  <p class="yearbar-label">年で移動</p>
+  <div class="yearbar" id="yearbar-bottom"></div>
+
+  <div class="foot-note">
+    視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
+    <a onclick="exportWatch()">視聴データを書き出し</a> ·
+    <a onclick="exportImage()">画像で書き出し（JPEG）</a> ·
+    <a onclick="importWatch()">読み込み</a>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const WATCH_KEY = "animeTV.watch.v1";
+const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", MOVIE: "劇場版" };
+const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", MOVIE: "s-movie" };
+const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, MOVIE: 4 };
+const STATUS_NEXT = { unwatched: "watching", watching: "done", done: "unwatched" };
+const STATUS_JA = { done: "視聴済", watching: "視聴中", unwatched: "未マーク" };
+
+let catalog = [];
+let years = [];
+let watch = loadWatch();
+let view = { mode: "year", year: null };   // mode: "year" | "collection"
+let query = "";
+let statusFilter = "all";
+let formatFilter = "all";
+
+/* ---------- persistence ---------- */
+function loadWatch() {
+  try { const r = localStorage.getItem(WATCH_KEY); if (r) return JSON.parse(r); }
+  catch (e) { console.error(e); }
+  return {};
+}
+function saveWatch() {
+  try { localStorage.setItem(WATCH_KEY, JSON.stringify(watch)); }
+  catch (e) { alert("保存に失敗: " + e.message); }
+}
+function statusOf(id) { return watch[id] || "unwatched"; }
+
+/* ---------- helpers ---------- */
+function esc(s) { return String(s).replace(/[&<>"']/g, c => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+function courLabel(ep) {
+  if (!ep) return null;
+  if (ep > 13) return { multi: true, text: ep > 52 ? "長期" : "連続" + Math.max(2, Math.round(ep / 13)) + "クール" };
+  return null;
+}
+function toast(msg) {
+  const t = document.getElementById("toast");
+  t.textContent = msg; t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1400);
+}
+
+/* ---------- init ---------- */
+function init() {
+  const cat = window.ANIME_CATALOG;
+  if (!cat || !Array.isArray(cat.anime) || cat.anime.length === 0) {
+    document.getElementById("list").innerHTML = `<div class="notice">
+      <div class="big">⏳</div>
+      <p>カタログデータ（<code>anime-data.js</code>）がまだありません。</p>
+      <p style="margin-top:10px">ターミナルで <code>python scrape_anime.py</code> を実行してデータを生成し、ページを再読み込みしてください。</p>
+    </div>`;
+    return;
+  }
+  catalog = cat.anime;
+  years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
+  view.year = years[0];
+  document.getElementById("src-note").textContent =
+    `データ: ${cat.source} ／ 生成日 ${cat.generated} ／ 全 ${cat.count.toLocaleString()} 作品（TV・ショート）`;
+  renderYearbar();
+  render();
+}
+
+/* ---------- year nav ---------- */
+function yearbarHtml() {
+  let html = `<button class="ytab collection ${view.mode === "collection" ? "active" : ""}" onclick="goCollection()">★ 視聴コレクション</button>`;
+  html += years.map(y =>
+    `<button class="ytab ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`
+  ).join("");
+  return html;
+}
+function renderYearbar() {
+  const html = yearbarHtml();
+  document.getElementById("yearbar").innerHTML = html;
+  const bottom = document.getElementById("yearbar-bottom");
+  if (bottom) bottom.innerHTML = html;
+}
+function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+
+/* ---------- filters ---------- */
+function setFilter(f) {
+  statusFilter = f;
+  document.querySelectorAll("#filters .chip").forEach(c => c.classList.toggle("active", c.dataset.f === f));
+  render();
+}
+function setFormat(f) {
+  formatFilter = f;
+  document.querySelectorAll("#formatfilters .chip").forEach(c => c.classList.toggle("active", c.dataset.ff === f));
+  render();
+}
+function onSearch() { query = document.getElementById("search").value.trim().toLowerCase(); render(); }
+
+// 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
+function passStatus(a) {
+  if (formatFilter !== "all" && a.f !== formatFilter) return false;
+  if (statusFilter === "all") return true;
+  return statusOf(a.id) === statusFilter;
+}
+
+/* ---------- stats ---------- */
+function renderStats() {
+  let done = 0, watching = 0;
+  for (const id in watch) { if (watch[id] === "done") done++; else if (watch[id] === "watching") watching++; }
+  document.getElementById("stats").innerHTML = `
+    <div class="stat done"><span class="num">${done}</span><span class="lbl">視聴済</span></div>
+    <div class="stat watching"><span class="num">${watching}</span><span class="lbl">視聴中</span></div>
+    <div class="stat"><span class="num">${catalog.length.toLocaleString()}</span><span class="lbl">カタログ作品</span></div>`;
+}
+
+/* ---------- main render ---------- */
+function render() {
+  renderStats();
+  const list = document.getElementById("list");
+
+  let items;
+  let grouped = true; // year+season grouping vs single year
+
+  if (query) {
+    items = catalog.filter(a => passStatus(a) &&
+      ((a.t && a.t.toLowerCase().includes(query)) || (a.tr && a.tr.toLowerCase().includes(query))));
+  } else if (view.mode === "collection") {
+    items = catalog.filter(a => statusOf(a.id) !== "unwatched" && passStatus(a));
+  } else {
+    items = catalog.filter(a => a.y === view.year && passStatus(a));
+    grouped = false;
+  }
+
+  if (items.length === 0) {
+    // 劇場版はテスト版のため未実装（データ除外中）
+    let msg;
+    if (formatFilter === "MOVIE") {
+      msg = "🎬 劇場版はテスト版のため未実装です。";
+    } else if (query) {
+      msg = "該当する作品がありません。";
+    } else if (view.mode === "collection") {
+      msg = "まだ視聴済み・視聴中の作品がありません。気になるクールから探してみましょう。";
+    } else {
+      msg = "この条件の作品がありません。";
+    }
+    list.innerHTML = `<div class="notice"><div class="big">${formatFilter === "MOVIE" ? "🚧" : "🔍"}</div><p>${msg}</p></div>`;
+    return;
+  }
+
+  if (!grouped) {
+    list.innerHTML = `<div class="year-block">${seasonGroupsHtml(items, view.year)}</div>`;
+  } else {
+    const byYear = {};
+    for (const a of items) (byYear[a.y] = byYear[a.y] || []).push(a);
+    const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
+    list.innerHTML = ys.map(y =>
+      `<div class="year-block"><div class="year-head">${y}年</div>${seasonGroupsHtml(byYear[y], y)}</div>`
+    ).join("");
+  }
+}
+
+function seasonGroupsHtml(items, year) {
+  const bySeason = {};
+  for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
+  const seasons = Object.keys(bySeason).sort((a, b) => (SEASON_ORDER[a] ?? 9) - (SEASON_ORDER[b] ?? 9));
+  return seasons.map(s => {
+    const arr = bySeason[s].sort((a, b) => (b.sc || 0) - (a.sc || 0));
+    const label = s === "MOVIE" ? `${year}年 劇場版` : `${year}年 ${SEASON_JA[s] || s}クール`;
+    return `<section class="cour">
+      <div class="cour-head ${SEASON_CLS[s] || ""}">
+        <span class="season">${label}</span>
+        <span class="count">${arr.length}作品</span>
+        <span class="line"></span>
+      </div>
+      <div class="grid">${arr.map(posterHtml).join("")}</div>
+    </section>`;
+  }).join("");
+}
+
+function posterHtml(a) {
+  const st = statusOf(a.id);
+  const isMovie = a.f === "MOVIE";
+  const cl = isMovie ? null : courLabel(a.ep);
+  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : "話数未定");
+  const fmtBadge = a.f === "SHORT" ? '<span class="fmt short">ショート</span>'
+                 : isMovie ? '<span class="fmt movie">劇場</span>' : "";
+  const img = a.img
+    ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
+    : `<div class="noimg">${esc(a.t)}</div>`;
+  return `<article class="poster ${st}" onclick="cycle(${a.id})" title="${esc(a.t)} ／ クリックで 視聴中→視聴済→未マーク を切替">
+    ${img}
+    ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
+    <span class="status">${st === "done"
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>'}</span>
+    <div class="meta">
+      <div class="ttl">${esc(a.t)}</div>
+      <div class="sub">
+        <span class="ep">${epText}</span>
+        ${cl ? `<span class="multi">${cl.text}</span>` : ""}
+        ${fmtBadge}
+      </div>
+    </div>
+  </article>`;
+}
+
+/* ---------- marking ---------- */
+function cycle(id) {
+  const cur = statusOf(id);
+  const next = STATUS_NEXT[cur];
+  if (next === "unwatched") delete watch[id]; else watch[id] = next;
+  saveWatch();
+  renderStats();
+  if (view.mode === "collection") render();
+  else updatePoster(id);
+  toast(STATUS_JA[next] + " にしました");
+}
+function updatePoster(id) {
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  document.querySelectorAll(`.poster`).forEach(el => {
+    if (el.getAttribute("onclick") === `cycle(${id})`) {
+      const tmp = document.createElement("div");
+      tmp.innerHTML = posterHtml(a);
+      el.replaceWith(tmp.firstElementChild);
+    }
+  });
+}
+
+/* ---------- import / export (JSON) ---------- */
+function exportWatch() {
+  const blob = new Blob([JSON.stringify(watch, null, 2)], { type: "application/json" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url; a.download = "anime-watch-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.click(); URL.revokeObjectURL(url);
+}
+function importWatch() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json";
+  inp.onchange = () => {
+    const file = inp.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("形式が不正です");
+        if (!confirm("現在の視聴データを読み込んだ内容で置き換えます。よろしいですか？")) return;
+        watch = parsed; saveWatch(); render();
+        toast("読み込みました");
+      } catch (e) { alert("読み込み失敗: " + e.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
+}
+
+/* ---------- export as JPEG image ----------
+   AniListのポスター画像は他オリジンのためcanvasを汚染しJPEG化できない。
+   そこで視聴済/視聴中タイトルをテキスト描画したまとめ画像を生成する。 */
+function exportImage() {
+  const watched = catalog.filter(a => statusOf(a.id) !== "unwatched");
+  if (watched.length === 0) { alert("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
+  watched.sort((a, b) => b.y - a.y || (SEASON_ORDER[a.s] ?? 9) - (SEASON_ORDER[b.s] ?? 9) || (b.sc || 0) - (a.sc || 0));
+
+  const byYear = {};
+  for (const a of watched) (byYear[a.y] = byYear[a.y] || []).push(a);
+  const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
+
+  const W = 920, pad = 40, lineH = 30, yearHeadH = 40, yearGap = 14, headerH = 150;
+  let bodyH = 0;
+  for (const y of ys) bodyH += yearHeadH + byYear[y].length * lineH + yearGap;
+  const H = headerH + bodyH + pad;
+
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = W * scale; canvas.height = H * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  const JP = '"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN",sans-serif';
+
+  ctx.fillStyle = "#0d0e12"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#7c5cff"; ctx.fillRect(0, 0, W, 6);
+
+  ctx.fillStyle = "#e8eaef"; ctx.font = `800 34px ${JP}`;
+  ctx.fillText("アニメ視聴コレクション", pad, 64);
+
+  let done = 0, wat = 0;
+  for (const id in watch) { if (watch[id] === "done") done++; else if (watch[id] === "watching") wat++; }
+  ctx.font = `700 18px ${JP}`;
+  ctx.fillStyle = "#34d399"; ctx.fillText(`✓ 視聴済 ${done}`, pad, 102);
+  ctx.fillStyle = "#fbbf24"; ctx.fillText(`▶ 視聴中 ${wat}`, pad + 170, 102);
+  ctx.fillStyle = "#5f6675"; ctx.font = `400 14px ${JP}`;
+  ctx.fillText(`${new Date().toISOString().slice(0, 10)} 書き出し ／ 全${watched.length}作品`, pad, 128);
+
+  let yy = headerH;
+  for (const y of ys) {
+    ctx.fillStyle = "#a48bff"; ctx.font = `800 22px ${JP}`;
+    ctx.fillText(`${y}年`, pad, yy + 22);
+    yy += yearHeadH;
+    for (const a of byYear[y]) {
+      const st = statusOf(a.id);
+      ctx.fillStyle = st === "done" ? "#34d399" : "#fbbf24";
+      ctx.font = `700 15px ${JP}`;
+      ctx.fillText(st === "done" ? "✓" : "▶", pad, yy + 16);
+      ctx.fillStyle = "#e8eaef"; ctx.font = `400 16px ${JP}`;
+      let title = a.t;
+      const maxW = W - pad * 2 - 90;
+      while (ctx.measureText(title).width > maxW && title.length > 4) title = title.slice(0, -1);
+      if (title !== a.t) title += "…";
+      ctx.fillText(title, pad + 26, yy + 16);
+      ctx.fillStyle = "#5f6675"; ctx.font = `400 13px ${JP}`;
+      ctx.textAlign = "right";
+      ctx.fillText(`${a.y} ${SEASON_JA[a.s] || a.s}`, W - pad, yy + 16);
+      ctx.textAlign = "left";
+      yy += lineH;
+    }
+    yy += yearGap;
+  }
+
+  canvas.toBlob(b => {
+    if (!b) { alert("画像の生成に失敗しました。"); return; }
+    const url = URL.createObjectURL(b);
+    const a = document.createElement("a");
+    a.href = url; a.download = "anime-collection-" + new Date().toISOString().slice(0, 10) + ".jpg";
+    a.click(); URL.revokeObjectURL(url);
+    toast("画像を書き出しました");
+  }, "image/jpeg", 0.92);
+}
+
+init();
+</script>
+<script src="anime-data.js"></script>
+<script>
+  // anime-data.js が後から読まれた場合に備えて再初期化
+  if (window.ANIME_CATALOG && catalog.length === 0) init();
+</script>
+</body>
+</html>
