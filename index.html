@@ -209,6 +209,7 @@
       <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
       <button class="chip" data-ff="OVA" onclick="setFormat('OVA')">OVA</button>
       <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場アニメ</button>
+      <button class="chip" data-ff="UPDATE" onclick="setFormat('UPDATE')">更新分</button>
     </div>
   </div>
 
@@ -246,6 +247,7 @@ let view = { mode: "year", year: null };   // mode: "year" | "collection"
 let query = "";
 let statusFilter = "all";
 let formatFilter = "all";
+let latestUpdate = "";   // 最新の追加日（更新分フィルタ用）
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 
 /* ---------- persistence ---------- */
@@ -285,6 +287,7 @@ function init() {
     return;
   }
   catalog = cat.anime;
+  latestUpdate = catalog.reduce((m, a) => (a.a && a.a > m) ? a.a : m, "");
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   view.year = years[0];
   document.getElementById("src-note").textContent =
@@ -340,7 +343,8 @@ function onSearch() { query = document.getElementById("search").value.trim().toL
 
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
-  if (formatFilter !== "all" && a.f !== formatFilter) return false;
+  if (formatFilter === "UPDATE") { if (a.a !== latestUpdate) return false; }
+  else if (formatFilter !== "all" && a.f !== formatFilter) return false;
   if (statusFilter === "all") return true;
   return statusOf(a.id) === statusFilter;
 }
@@ -371,6 +375,8 @@ function render() {
       ((a.t && a.t.toLowerCase().includes(query)) || (a.tr && a.tr.toLowerCase().includes(query))));
   } else if (view.mode === "collection") {
     items = catalog.filter(a => statusOf(a.id) !== "unwatched" && passStatus(a));
+  } else if (formatFilter === "UPDATE") {
+    items = catalog.filter(a => passStatus(a));   // 更新分は年代横断で表示
   } else {
     items = catalog.filter(a => a.y === view.year && passStatus(a));
     grouped = false;
