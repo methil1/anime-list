@@ -402,6 +402,14 @@ def run_range_merge(lo, hi):
     print(f"\n完了: {OUT_PATH} に既存+{added}件をマージ（ハングル除外後の総数は再読込で確認）。", flush=True)
 
 
+def run_update():
+    """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA を
+    取得して既存にマージする（新クール・新作の取りこぼしを補完。軽量）。"""
+    cur = date.today().year
+    print(f"自動更新: {cur}年を再取得してマージ", flush=True)
+    run_range_merge(cur, cur)
+
+
 def run_full(start_year):
     """TV/ショート（クール別）と劇場（公開年別）をすべて取得。"""
     seasons = season_list(start_year)
@@ -439,7 +447,9 @@ def run_full(start_year):
 
 def main():
     args = sys.argv[1:]
-    if args and args[0] == "--add":
+    if args and args[0] == "--update":
+        run_update()
+    elif args and args[0] == "--add":
         run_add(args[1:])
     elif args and args[0] == "--range":
         lo = int(args[1])
