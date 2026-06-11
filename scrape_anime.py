@@ -10,6 +10,8 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
     python scrape_anime.py --movies     # 劇場アニメだけ取得し、既存 anime-data.js にマージ
                                         #   （既存の TV/ショートはそのまま保持。高速）
     python scrape_anime.py --ova        # OVA だけ取得し既存にマージ（公開年別カテゴライズ）
+    python scrape_anime.py --ona-jp 2000
+                                        # 人気JP-ONA(配信)を pop>=floor で取得しマージ（ONA→TV扱い）
     python scrape_anime.py --range 1990 1999
                                         # 指定年範囲の TV/ショート + 劇場を取得し、既存にマージ
                                         #   （過去年代の追加に使う。既存データは保持）
@@ -96,6 +98,30 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       genres
       coverImage { medium }
       startDate { year }
+    }
+  }
+}
+"""
+
+
+# 人気JP-ONA: 配信(ONA)で通常スクレイプ対象外だが主要作が多い。
+# countryOfOrigin:JP で中国donghua等を除外し、人気度順に取得する。
+ONA_JP_QUERY = """
+query ($page: Int) {
+  Page(page: $page, perPage: 50) {
+    pageInfo { hasNextPage }
+    media(format: ONA, countryOfOrigin: "JP", sort: POPULARITY_DESC, isAdult: false) {
+      id
+      title { romaji native }
+      episodes
+      season
+      seasonYear
+      format
+      averageScore
+      genres
+      coverImage { medium }
+      startDate { year month }
+      popularity
     }
   }
 }
@@ -402,12 +428,66 @@ def run_range_merge(lo, hi):
     print(f"\n完了: {OUT_PATH} に既存+{added}件をマージ（ハングル除外後の総数は再読込で確認）。", flush=True)
 
 
+def _season_from_month(mo):
+    """startDate.month から季節を推定（season が無いONA用）。"""
+    return SEASONS[(mo - 1) // 3] if mo else None
+
+
+def fetch_ona_jp_popular(floor):
+    """人気JP-ONAを人気度降順に取得。popularity が floor を下回ったら打ち切り。"""
+    items = []
+    page = 1
+    while True:
+        data = post(ONA_JP_QUERY, {"page": page})
+        if "errors" in data:
+            print(f"    GraphQL error: {data['errors']}", flush=True)
+            break
+        pg = data["data"]["Page"]
+        stop = False
+        for m in pg["media"]:
+            if (m.get("popularity") or 0) < floor:
+                stop = True
+                break
+            items.append(m)
+        print(f"    page {page}: 累計 {len(items)} 件", flush=True)
+        if stop or not pg["pageInfo"]["hasNextPage"]:
+            break
+        page += 1
+        time.sleep(1.0)
+    return items
+
+
+def run_ona_jp_merge(floor):
+    """人気JP-ONAを既存カタログにマージ（ONA→TV扱いで該当クールに配置）。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    seen = {a["id"] for a in anime}
+    print(f"JP-ONA(人気pop>={floor})をマージ取得 / 既存 {len(anime)} 件を保持", flush=True)
+    media = fetch_ona_jp_popular(floor)
+    added = 0
+    for m in media:
+        if m["id"] in seen:
+            continue
+        seen.add(m["id"])
+        sd = m.get("startDate") or {}
+        season = m.get("season") or _season_from_month(sd.get("month")) or "WINTER"
+        yr = m.get("seasonYear") or sd.get("year") or date.today().year
+        anime.append(make_record(m, yr, season))
+        added += 1
+    write_catalog(anime)
+    print(f"\n完了: JP-ONA を {added} 件追加（ハングル除外後の総数は再読込で確認）。", flush=True)
+
+
+ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下限
+
+
 def run_update():
-    """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA を
-    取得して既存にマージする（新クール・新作の取りこぼしを補完。軽量）。"""
+    """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA に加え、
+    人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。"""
     cur = date.today().year
-    print(f"自動更新: {cur}年を再取得してマージ", flush=True)
+    print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
+    run_ona_jp_merge(ONA_JP_FLOOR)
 
 
 def run_full(start_year):
@@ -449,6 +529,9 @@ def main():
     args = sys.argv[1:]
     if args and args[0] == "--update":
         run_update()
+    elif args and args[0] == "--ona-jp":
+        floor = int(args[1]) if len(args) > 1 else 2000
+        run_ona_jp_merge(floor)
     elif args and args[0] == "--add":
         run_add(args[1:])
     elif args and args[0] == "--range":
