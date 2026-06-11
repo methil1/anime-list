@@ -267,6 +267,7 @@ def make_record(m, year, season, force_fmt=None):
         "img": (m.get("coverImage") or {}).get("medium") or "",
         "sc": m.get("averageScore"),
         "g": genres,
+        "a": date.today().isoformat(),  # カタログへの追加日（新着表示用）
     }
 
 

@@ -112,6 +112,7 @@
   .s-fall   { color: #fdba74; }
   .s-ova    { color: #5eead4; }
   .s-movie  { color: #c4b5fd; }
+  .s-recent { color: var(--accent-soft); }
 
   /* Poster grid */
   .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 14px; }
@@ -182,6 +183,7 @@
 
   <div class="collection-bar">
     <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
+    <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着</button>
     <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
   </div>
 
@@ -316,9 +318,12 @@ function renderYearbar() {
   if (bottom) bottom.innerHTML = html;
   const cb = document.getElementById("collection-btn");
   if (cb) cb.classList.toggle("active", view.mode === "collection");
+  const rb = document.getElementById("recent-btn");
+  if (rb) rb.classList.toggle("active", view.mode === "recent");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
 /* ---------- filters ---------- */
 function setFilter(f) {
@@ -355,6 +360,8 @@ function renderStats() {
 function render() {
   renderStats();
   const list = document.getElementById("list");
+
+  if (view.mode === "recent" && !query) { renderRecent(list); return; }
 
   let items;
   let grouped = true; // year+season grouping vs single year
@@ -394,6 +401,30 @@ function render() {
   }
 }
 
+function renderRecent(list) {
+  const items = catalog.filter(a => a.a && passStatus(a));
+  if (items.length === 0) {
+    list.innerHTML = `<div class="notice"><div class="big">🆕</div><p>新着作品がありません。</p></div>`;
+    return;
+  }
+  list.innerHTML = `<div class="year-block">${recentGroupsHtml(items)}</div>`;
+}
+function recentGroupsHtml(items) {
+  const byDate = {};
+  for (const a of items) (byDate[a.a] = byDate[a.a] || []).push(a);
+  const dates = Object.keys(byDate).sort().reverse();
+  return dates.map(d => {
+    const arr = byDate[d].slice().sort((x, y) => (y.y - x.y) || ((y.sc || 0) - (x.sc || 0)));
+    return `<section class="cour">
+      <div class="cour-head s-recent">
+        <span class="season">${d} に追加</span>
+        <span class="count">${arr.length}作品</span>
+        <span class="line"></span>
+      </div>
+      <div class="grid">${arr.map(posterHtml).join("")}</div>
+    </section>`;
+  }).join("");
+}
 function seasonGroupsHtml(items, year) {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
