@@ -1,27 +1,46 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-AniList から TV アニメ一覧を年×クール（季節）ごとに取得し、
+AniList から TV / ショート / 劇場アニメ一覧を取得し、
 ブラウザの file:// から読める anime-data.js を生成する。
 
 使い方:
-    python scrape_anime.py            # 2000年WINTER 〜 現在クール
-    python scrape_anime.py 2010       # 開始年を指定
+    python scrape_anime.py              # 全取得（TV/ショート=クール別 + 劇場=公開年別）2000〜現在
+    python scrape_anime.py 2010         # 開始年を指定して全取得
+    python scrape_anime.py --movies     # 劇場アニメだけ取得し、既存 anime-data.js にマージ
+                                        #   （既存の TV/ショートはそのまま保持。高速）
+    python scrape_anime.py --ova        # OVA だけ取得し既存にマージ（公開年別カテゴライズ）
+    python scrape_anime.py --range 1990 1999
+                                        # 指定年範囲の TV/ショート + 劇場を取得し、既存にマージ
+                                        #   （過去年代の追加に使う。既存データは保持）
+    python scrape_anime.py --add "とんがり帽子のアトリエ" 200769
+                                        # 個別作品をタイトル検索 or AniList ID で追加。
+                                        #   ONA(配信)など通常スクレイプ対象外の作品の取りこぼし補完に使う。
 
 仕様:
-  - format: TV のみ（TV_SHORT / OVA / 映画 / ONA は除外）
-  - 連続2クール以上の作品は AniList の season/seasonYear（=放送開始クール）に
-    1回だけ出るため、そのまま開始クールへ配置される。
+  - TV/ショート: format TV / TV_SHORT を season/seasonYear（放送開始クール）ごとに取得。
+  - 劇場: format MOVIE を startDate（公開日）の年範囲で取得し、公開年でカテゴライズ。
+      AniList は MOVIE に対し season 無しの seasonYear 単独フィルタを無視するため、
+      seasonYear ではなく startDate_greater / startDate_lesser（FuzzyDateInt）で年を絞る。
   - isAdult は除外。
   - 出力は window.ANIME_CATALOG への代入（CORS回避のため .json ではなく .js）。
 """
 
 import json
+import re
 import sys
 import time
 import urllib.request
 import urllib.error
 from datetime import date
+
+# ハングル（韓国語）を含むタイトルを除外するための判定。
+# 日本のアニメリストにするため韓国作品（native/romaji がハングル）を弾く。
+HANGUL_RE = re.compile(r"[가-힣ᄀ-ᇿ㄰-㆏ꥠ-꥿ힰ-퟿]")
+
+
+def has_hangul(rec):
+    return bool(HANGUL_RE.search(rec.get("t") or "")) or bool(HANGUL_RE.search(rec.get("tr") or ""))
 
 API_URL = "https://graphql.anilist.co"
 OUT_PATH = "anime-data.js"
@@ -41,6 +60,7 @@ GENRE_JA = {
     "Hentai": "成人向け",
 }
 
+# TV / ショート: クール（season + seasonYear）で取得
 QUERY = """
 query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
   Page(page: $page, perPage: 50) {
@@ -55,6 +75,27 @@ query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
       averageScore
       genres
       coverImage { medium }
+    }
+  }
+}
+"""
+
+# 劇場 / OVA: 公開日(startDate)の年範囲で取得。型は FuzzyDateInt（Int ではない）。
+YEARLY_QUERY = """
+query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
+  Page(page: $page, perPage: 50) {
+    pageInfo { hasNextPage }
+    media(format: $fmt, startDate_greater: $dgt, startDate_lesser: $dlt, sort: POPULARITY_DESC, isAdult: false) {
+      id
+      title { romaji native }
+      episodes
+      season
+      seasonYear
+      format
+      averageScore
+      genres
+      coverImage { medium }
+      startDate { year }
     }
   }
 }
@@ -107,6 +148,7 @@ def season_list(start_year):
 
 
 def fetch_list(year, season, formats):
+    """TV/ショートをクール単位で取得。"""
     items = []
     page = 1
     while True:
@@ -123,58 +165,105 @@ def fetch_list(year, season, formats):
     return items
 
 
+def fetch_yearly(year, fmt, retry_on_empty=False):
+    """劇場(MOVIE)/OVA を公開年(startDate)単位で取得。
+    AniList が稀に空配列を返す既知の不具合があるため、retry_on_empty=True で
+    0件だった場合に一度だけ再取得する。"""
+    items = _fetch_yearly_once(year, fmt)
+    if not items and retry_on_empty:
+        print(f"    0件のため再取得 {year} {fmt} ...", flush=True)
+        time.sleep(2)
+        items = _fetch_yearly_once(year, fmt)
+    return items
+
+
+def _fetch_yearly_once(year, fmt):
+    items = []
+    page = 1
+    # startDate は YYYYMMDD の FuzzyDateInt。年だけの作品は YYYY0000 になるため
+    # 下限を year*10000-1（=YYYY 直前）にして年初の作品も取りこぼさない。
+    dgt = year * 10000 - 1
+    dlt = (year + 1) * 10000
+    while True:
+        data = post(YEARLY_QUERY, {"dgt": dgt, "dlt": dlt, "page": page, "fmt": fmt})
+        if "errors" in data:
+            print(f"    GraphQL error: {data['errors']}", flush=True)
+            break
+        pg = data["data"]["Page"]
+        items.extend(pg["media"])
+        if not pg["pageInfo"]["hasNextPage"]:
+            break
+        page += 1
+        time.sleep(1.2)
+    return items
+
+
+def fetch_movies(year, retry_on_empty=False):
+    return fetch_yearly(year, "MOVIE", retry_on_empty)
+
+
+# 個別追加用: タイトル検索 / ID 指定。ONA など通常対象外の format も取り込む。
+ADD_FIELDS = "id title{romaji native} episodes season seasonYear format averageScore genres coverImage{medium} startDate{year}"
+ADD_BY_ID_QUERY = "query ($id: Int) { Media(id: $id, type: ANIME) { %s } }" % ADD_FIELDS
+ADD_SEARCH_QUERY = "query ($q: String) { Page(perPage: 1) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { %s } } }" % ADD_FIELDS
+
+
 # AniList の format → 出力フィールド f
-FMT = {"TV": "TV", "TV_SHORT": "SHORT", "MOVIE": "MOVIE"}
+# MOVIE/OVA は公開年でカテゴライズ。ONA/SPECIAL は TV 扱いで該当クールに表示。
+FMT = {"TV": "TV", "TV_SHORT": "SHORT", "MOVIE": "MOVIE", "OVA": "OVA"}
+
+# 公開年(startDate)単位でカテゴライズする format（クールではなく年別ソート）
+YEARLY_FORMATS = ("MOVIE", "OVA")
 
 
-def main():
-    start_year = int(sys.argv[1]) if len(sys.argv) > 1 else 2000
-    seasons = season_list(start_year)
-    years = sorted({y for (y, _s) in seasons})
-    print(f"対象: {start_year} 〜 現在 / TV・ショート {len(seasons)}クール + 劇場版 {len(years)}年分", flush=True)
+def make_record(m, year, season, force_fmt=None):
+    """AniList の media 1件を出力レコードに変換。
+    MOVIE/OVA は公開年(startDate)でカテゴライズし s=フォーマット名。"""
+    title = m["title"]
+    genres = [GENRE_JA.get(g, g) for g in (m.get("genres") or [])[:3]]
+    fmt = m.get("format") or force_fmt or "TV"
+    is_yearly = fmt in YEARLY_FORMATS
+    if is_yearly:
+        # 公開年を最優先（startDate.year → seasonYear → ループの year）
+        yr = (m.get("startDate") or {}).get("year") or m.get("seasonYear") or year
+        s = fmt
+    else:
+        yr = m.get("seasonYear") or year
+        s = m.get("season") or season
+    return {
+        "id": m["id"],
+        "t": title.get("native") or title.get("romaji") or "(不明)",
+        "tr": title.get("romaji") or "",
+        "y": yr,
+        "s": s,
+        "f": FMT.get(fmt, "TV"),
+        "ep": m.get("episodes"),
+        "img": (m.get("coverImage") or {}).get("medium") or "",
+        "sc": m.get("averageScore"),
+        "g": genres,
+    }
 
-    seen = {}
 
-    def ingest(media, year, season, force_movie=False):
-        for m in media:
-            if m["id"] in seen:
-                continue
-            title = m["title"]
-            genres = [GENRE_JA.get(g, g) for g in (m.get("genres") or [])[:3]]
-            fmt = m.get("format") or ("MOVIE" if force_movie else "TV")
-            seen[m["id"]] = {
-                "id": m["id"],
-                "t": title.get("native") or title.get("romaji") or "(不明)",
-                "tr": title.get("romaji") or "",
-                "y": m.get("seasonYear") or year,
-                "s": "MOVIE" if fmt == "MOVIE" else (m.get("season") or season),
-                "f": FMT.get(fmt, "TV"),
-                "ep": m.get("episodes"),
-                "img": (m.get("coverImage") or {}).get("medium") or "",
-                "sc": m.get("averageScore"),
-                "g": genres,
-            }
+# 同一年内の表示順: クール（冬春夏秋）→ OVA → 劇場
+def _season_order(s):
+    return {"WINTER": 0, "SPRING": 1, "SUMMER": 2, "FALL": 3, "OVA": 4, "MOVIE": 5}.get(s, 9)
 
-    # TV / ショート: 季節（クール）ごと
-    for n, (year, season) in enumerate(seasons, 1):
-        print(f"[TV/SHORT {n}/{len(seasons)}] {year} {season} ...", flush=True)
-        media = fetch_list(year, season, ["TV", "TV_SHORT"])
-        ingest(media, year, season)
-        print(f"    取得 {len(media)} 件 / 累計 {len(seen)} 件", flush=True)
-        time.sleep(1.2)
 
-    # 劇場版: 年ごと（season 指定なし）
-    for n, year in enumerate(years, 1):
-        print(f"[MOVIE {n}/{len(years)}] {year} ...", flush=True)
-        media = fetch_list(year, None, ["MOVIE"])
-        ingest(media, year, None, force_movie=True)
-        print(f"    取得 {len(media)} 件 / 累計 {len(seen)} 件", flush=True)
-        time.sleep(1.2)
-
-    order = {"WINTER": 0, "SPRING": 1, "SUMMER": 2, "FALL": 3, "MOVIE": 4}
-    anime = sorted(seen.values(), key=lambda a: (-a["y"], order.get(a["s"], 9)))
+def write_catalog(anime):
+    # 韓国作品（ハングルタイトル）は日本のアニメリストから除外
+    anime = [a for a in anime if not has_hangul(a)]
+    anime = sorted(anime, key=lambda a: (-a["y"], _season_order(a["s"]), -(a.get("sc") or 0)))
+    today = date.today().isoformat()
+    # 生成日(created)は初回のものを引き継ぎ、更新日(generated)は毎回今日にする。
+    created = today
+    try:
+        prev = load_existing()
+        created = prev.get("created") or prev.get("generated") or today
+    except Exception:
+        pass
     payload = {
-        "generated": date.today().isoformat(),
+        "created": created,
+        "generated": today,
         "source": "AniList (https://anilist.co)",
         "count": len(anime),
         "anime": anime,
@@ -185,7 +274,186 @@ def main():
         json.dump(payload, f, ensure_ascii=False, separators=(",", ":"))
         f.write(";\n")
 
-    print(f"\n完了: {OUT_PATH} に {len(anime)} 作品を書き出しました。", flush=True)
+
+def load_existing():
+    """既存 anime-data.js から payload(dict) を読み込む（マージ用）。"""
+    with open(OUT_PATH, encoding="utf-8") as f:
+        txt = f.read()
+    start = txt.index("{")
+    end = txt.rindex("}")
+    return json.loads(txt[start:end + 1])
+
+
+def movie_years(start_year):
+    return list(range(start_year, date.today().year + 1))
+
+
+def run_yearly_merge(fmt, start_year):
+    """MOVIE/OVA を公開年単位で取得し、既存データにマージする。
+    同フォーマットの既存レコードは入れ替え（他は保持）。高速。"""
+    label = {"MOVIE": "劇場", "OVA": "OVA"}.get(fmt, fmt)
+    out_f = FMT.get(fmt, fmt)
+    existing = load_existing()
+    kept = [a for a in existing.get("anime", []) if a.get("f") != out_f]
+    seen_ids = {a["id"] for a in kept}
+    years = movie_years(start_year)
+    print(f"{label}をマージ取得: {start_year}〜{years[-1]} / 既存 {len(kept)} 件を保持", flush=True)
+
+    fresh = []
+    for n, year in enumerate(years, 1):
+        print(f"[{fmt} {n}/{len(years)}] {year} ...", flush=True)
+        media = fetch_yearly(year, fmt, retry_on_empty=True)
+        added = 0
+        for m in media:
+            if m["id"] in seen_ids:
+                continue
+            seen_ids.add(m["id"])
+            fresh.append(make_record(m, year, None, force_fmt=fmt))
+            added += 1
+        print(f"    取得 {len(media)} 件 / 新規 {added} 件 / {label}累計 {len(fresh)} 件", flush=True)
+        time.sleep(1.2)
+
+    write_catalog(kept + fresh)
+    print(f"\n完了: {OUT_PATH} に既存 {len(kept)} + {label} {len(fresh)} = {len(kept) + len(fresh)} 作品を書き出しました。", flush=True)
+
+
+def fetch_by_id(mid):
+    d = post(ADD_BY_ID_QUERY, {"id": mid})
+    if "errors" in d:
+        print(f"    GraphQL error: {d['errors']}", flush=True)
+        return None
+    return d["data"]["Media"]
+
+
+def search_one(title):
+    d = post(ADD_SEARCH_QUERY, {"q": title})
+    if "errors" in d:
+        print(f"    GraphQL error: {d['errors']}", flush=True)
+        return None
+    arr = d["data"]["Page"]["media"]
+    return arr[0] if arr else None
+
+
+def run_add(queries):
+    """個別作品をタイトル検索 or AniList ID で既存カタログに追加する。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    seen = {a["id"] for a in anime}
+    added = 0
+    for q in queries:
+        m = fetch_by_id(int(q)) if q.isdigit() else search_one(q)
+        if not m:
+            print(f"  見つかりませんでした: {q}", flush=True)
+            continue
+        rec = make_record(m, m.get("seasonYear") or date.today().year, m.get("season"))
+        if rec["id"] in seen:
+            print(f"  既に存在: {rec['t']}（{rec['y']} {rec['s']}）", flush=True)
+            continue
+        seen.add(rec["id"])
+        anime.append(rec)
+        added += 1
+        print(f"  追加: {rec['y']} {rec['s']} {rec['f']} / {rec['t']}", flush=True)
+        time.sleep(0.6)
+    write_catalog(anime)
+    print(f"\n完了: {added} 件を追加しました（ハングル除外後の総数は再読込で確認）。", flush=True)
+
+
+def run_range_merge(lo, hi):
+    """指定年範囲(lo〜hi)の TV/ショート + 劇場を取得し、既存データにマージする。
+    過去年代を後から追加する用途。既存レコードは id で重複排除して保持。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    seen_ids = {a["id"] for a in anime}
+    years = list(range(lo, hi + 1))
+    print(f"年範囲マージ: {lo}〜{hi} / 既存 {len(anime)} 件を保持", flush=True)
+
+    added = 0
+    # TV / ショート: 各年×4クール
+    cours = [(y, s) for y in years for s in SEASONS]
+    for n, (year, season) in enumerate(cours, 1):
+        print(f"[TV/SHORT {n}/{len(cours)}] {year} {season} ...", flush=True)
+        media = fetch_list(year, season, ["TV", "TV_SHORT"])
+        for m in media:
+            if m["id"] in seen_ids:
+                continue
+            seen_ids.add(m["id"])
+            anime.append(make_record(m, year, season))
+            added += 1
+        print(f"    取得 {len(media)} 件 / 追加累計 {added} 件", flush=True)
+        time.sleep(1.2)
+
+    # 劇場 / OVA: 各年（公開年）
+    for fmt in YEARLY_FORMATS:
+        for n, year in enumerate(years, 1):
+            print(f"[{fmt} {n}/{len(years)}] {year} ...", flush=True)
+            media = fetch_yearly(year, fmt, retry_on_empty=True)
+            cnt = 0
+            for m in media:
+                if m["id"] in seen_ids:
+                    continue
+                seen_ids.add(m["id"])
+                anime.append(make_record(m, year, None, force_fmt=fmt))
+                added += 1
+                cnt += 1
+            print(f"    取得 {len(media)} 件 / 新規 {cnt} 件 / 追加累計 {added} 件", flush=True)
+            time.sleep(1.2)
+
+    write_catalog(anime)
+    print(f"\n完了: {OUT_PATH} に既存+{added}件をマージ（ハングル除外後の総数は再読込で確認）。", flush=True)
+
+
+def run_full(start_year):
+    """TV/ショート（クール別）と劇場（公開年別）をすべて取得。"""
+    seasons = season_list(start_year)
+    years = movie_years(start_year)
+    print(f"対象: {start_year} 〜 現在 / TV・ショート {len(seasons)}クール + 劇場 {len(years)}年分", flush=True)
+
+    seen = {}
+
+    def ingest(media, year, season, force_fmt=None):
+        for m in media:
+            if m["id"] in seen:
+                continue
+            seen[m["id"]] = make_record(m, year, season, force_fmt=force_fmt)
+
+    # TV / ショート: 季節（クール）ごと
+    for n, (year, season) in enumerate(seasons, 1):
+        print(f"[TV/SHORT {n}/{len(seasons)}] {year} {season} ...", flush=True)
+        media = fetch_list(year, season, ["TV", "TV_SHORT"])
+        ingest(media, year, season)
+        print(f"    取得 {len(media)} 件 / 累計 {len(seen)} 件", flush=True)
+        time.sleep(1.2)
+
+    # 劇場 / OVA: 公開年ごと（startDate 年範囲）
+    for fmt in YEARLY_FORMATS:
+        for n, year in enumerate(years, 1):
+            print(f"[{fmt} {n}/{len(years)}] {year} ...", flush=True)
+            media = fetch_yearly(year, fmt, retry_on_empty=True)
+            ingest(media, year, None, force_fmt=fmt)
+            print(f"    取得 {len(media)} 件 / 累計 {len(seen)} 件", flush=True)
+            time.sleep(1.2)
+
+    write_catalog(list(seen.values()))
+    print(f"\n完了: {OUT_PATH} に {len(seen)} 作品を書き出しました。", flush=True)
+
+
+def main():
+    args = sys.argv[1:]
+    if args and args[0] == "--add":
+        run_add(args[1:])
+    elif args and args[0] == "--range":
+        lo = int(args[1])
+        hi = int(args[2]) if len(args) > 2 else lo
+        run_range_merge(lo, hi)
+    elif args and args[0] in ("--movies", "--movie", "--merge"):
+        start_year = int(args[1]) if len(args) > 1 else 1990
+        run_yearly_merge("MOVIE", start_year)
+    elif args and args[0] == "--ova":
+        start_year = int(args[1]) if len(args) > 1 else 1990
+        run_yearly_merge("OVA", start_year)
+    else:
+        start_year = int(args[0]) if args else 2000
+        run_full(start_year)
 
 
 if __name__ == "__main__":

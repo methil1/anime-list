@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TVアニメ視聴カタログ</title>
+<title>アニメ視聴備忘録</title>
 <style>
   :root {
     --bg: #0d0e12;
@@ -42,6 +42,7 @@
   h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
+  .dev-note { color: var(--watching); font-size: 0.82rem; margin-top: 6px; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
 
   .stats { display: flex; gap: 22px; margin-top: 22px; flex-wrap: wrap; }
@@ -50,6 +51,8 @@
   .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
+  .collection-bar { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+  body.hide-scores .poster .score { display: none; }
 
   /* Toolbar */
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 26px; }
@@ -104,6 +107,7 @@
   .s-spring { color: #f9a8d4; }
   .s-summer { color: #fcd34d; }
   .s-fall   { color: #fdba74; }
+  .s-ova    { color: #5eead4; }
   .s-movie  { color: #c4b5fd; }
 
   /* Poster grid */
@@ -130,6 +134,7 @@
   .poster .multi { background: var(--accent); color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
   .poster .fmt { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
   .poster .fmt.short { background: #0e7490; color: #cffafe; }
+  .poster .fmt.ova { background: #0f766e; color: #ccfbf1; }
   .poster .fmt.movie { background: #7c3aed; color: #fff; }
 
   /* status corner */
@@ -146,6 +151,9 @@
 
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
   .foot-note a { color: var(--text-dim); cursor: pointer; text-decoration: underline; }
+  .src-credit { margin-top: 18px; text-align: right; color: var(--text-faint); font-size: 0.72rem; }
+  .src-credit a { color: var(--text-dim); text-decoration: none; }
+  .src-credit a:hover { text-decoration: underline; }
 
   /* toast */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: 0 12px 30px -10px rgba(0,0,0,.7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
@@ -157,13 +165,19 @@
   <header>
     <div class="title-row">
       <div>
-        <h1>TV<span class="accent">アニメ</span>カタログ</h1>
-        <p class="subtitle">クール・劇場公開ごとのタイトルから、見た作品をマークしていく</p>
+        <h1>アニメ<span class="accent">視聴備忘録</span></h1>
+        <p class="subtitle">見た作品をクリックし視聴区分を自分用メモとして使ってください</p>
+        <p class="dev-note">※劇場アニメは開発中につき様々な作品が表示されてしまう可能性があります。</p>
         <p class="src-note" id="src-note"></p>
       </div>
     </div>
     <div class="stats" id="stats"></div>
   </header>
+
+  <div class="collection-bar">
+    <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
+    <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
+  </div>
 
   <div class="toolbar">
     <div class="search">
@@ -184,7 +198,8 @@
       <button class="chip active" data-ff="all" onclick="setFormat('all')">すべて</button>
       <button class="chip" data-ff="TV" onclick="setFormat('TV')">TV</button>
       <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
-      <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場版</button>
+      <button class="chip" data-ff="OVA" onclick="setFormat('OVA')">OVA</button>
+      <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場アニメ</button>
     </div>
   </div>
 
@@ -201,15 +216,17 @@
     <a onclick="exportImage()">画像で書き出し（JPEG）</a> ·
     <a onclick="importWatch()">読み込み</a>
   </div>
+
+  <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a></p>
 </div>
 
 <div class="toast" id="toast"></div>
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
-const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", MOVIE: "劇場版" };
-const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", MOVIE: "s-movie" };
-const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, MOVIE: 4 };
+const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
+const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
+const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
 const STATUS_NEXT = { unwatched: "watching", watching: "done", done: "unwatched" };
 const STATUS_JA = { done: "視聴済", watching: "視聴中", unwatched: "未マーク" };
 
@@ -220,6 +237,7 @@ let view = { mode: "year", year: null };   // mode: "year" | "collection"
 let query = "";
 let statusFilter = "all";
 let formatFilter = "all";
+let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 
 /* ---------- persistence ---------- */
 function loadWatch() {
@@ -261,24 +279,36 @@ function init() {
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   view.year = years[0];
   document.getElementById("src-note").textContent =
-    `データ: ${cat.source} ／ 生成日 ${cat.generated} ／ 全 ${cat.count.toLocaleString()} 作品（TV・ショート）`;
+    `生成日 ${cat.created || cat.generated} ／ 更新日 ${cat.generated}`;
+  applyScoreVisibility();
   renderYearbar();
   render();
 }
 
+/* ---------- score visibility ---------- */
+function applyScoreVisibility() {
+  document.body.classList.toggle("hide-scores", !showScores);
+  const btn = document.getElementById("score-btn");
+  if (btn) {
+    btn.classList.toggle("active", showScores);
+    btn.textContent = showScores ? "★ 評価値を非表示" : "★ 評価値を表示";
+  }
+}
+function toggleScores() { showScores = !showScores; applyScoreVisibility(); }
+
 /* ---------- year nav ---------- */
 function yearbarHtml() {
-  let html = `<button class="ytab collection ${view.mode === "collection" ? "active" : ""}" onclick="goCollection()">★ 視聴コレクション</button>`;
-  html += years.map(y =>
+  return years.map(y =>
     `<button class="ytab ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`
   ).join("");
-  return html;
 }
 function renderYearbar() {
   const html = yearbarHtml();
   document.getElementById("yearbar").innerHTML = html;
   const bottom = document.getElementById("yearbar-bottom");
   if (bottom) bottom.innerHTML = html;
+  const cb = document.getElementById("collection-btn");
+  if (cb) cb.classList.toggle("active", view.mode === "collection");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -332,18 +362,15 @@ function render() {
   }
 
   if (items.length === 0) {
-    // 劇場版はテスト版のため未実装（データ除外中）
     let msg;
-    if (formatFilter === "MOVIE") {
-      msg = "🎬 劇場版はテスト版のため未実装です。";
-    } else if (query) {
+    if (query) {
       msg = "該当する作品がありません。";
     } else if (view.mode === "collection") {
       msg = "まだ視聴済み・視聴中の作品がありません。気になるクールから探してみましょう。";
     } else {
       msg = "この条件の作品がありません。";
     }
-    list.innerHTML = `<div class="notice"><div class="big">${formatFilter === "MOVIE" ? "🚧" : "🔍"}</div><p>${msg}</p></div>`;
+    list.innerHTML = `<div class="notice"><div class="big">🔍</div><p>${msg}</p></div>`;
     return;
   }
 
@@ -365,7 +392,8 @@ function seasonGroupsHtml(items, year) {
   const seasons = Object.keys(bySeason).sort((a, b) => (SEASON_ORDER[a] ?? 9) - (SEASON_ORDER[b] ?? 9));
   return seasons.map(s => {
     const arr = bySeason[s].sort((a, b) => (b.sc || 0) - (a.sc || 0));
-    const label = s === "MOVIE" ? `${year}年 劇場版` : `${year}年 ${SEASON_JA[s] || s}クール`;
+    const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
+    const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
     return `<section class="cour">
       <div class="cour-head ${SEASON_CLS[s] || ""}">
         <span class="season">${label}</span>
@@ -380,9 +408,11 @@ function seasonGroupsHtml(items, year) {
 function posterHtml(a) {
   const st = statusOf(a.id);
   const isMovie = a.f === "MOVIE";
-  const cl = isMovie ? null : courLabel(a.ep);
-  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : "話数未定");
+  const isOva = a.f === "OVA";
+  const cl = (isMovie || isOva) ? null : courLabel(a.ep);
+  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : (isOva ? "OVA" : "話数未定"));
   const fmtBadge = a.f === "SHORT" ? '<span class="fmt short">ショート</span>'
+                 : isOva ? '<span class="fmt ova">OVA</span>'
                  : isMovie ? '<span class="fmt movie">劇場</span>' : "";
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
