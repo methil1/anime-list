@@ -243,8 +243,7 @@
 
   <div class="foot-note">
     視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
-    <a onclick="exportWatch()">視聴データを書き出し</a> ·
-    <a onclick="exportImage()">画像で書き出し（JPEG）</a> ·
+    <a onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
     <a onclick="importWatch()">読み込み</a>
   </div>
 
@@ -253,6 +252,7 @@
 
 <div class="toast" id="toast"></div>
 <div class="ctx-menu" id="ctxmenu"></div>
+<div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
 
 <script>
@@ -260,16 +260,26 @@ const WATCH_KEY = "animeTV.watch.v1";
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
+// 表示用の並び順: クールは秋→夏→春→冬の降順（新しいクールを上に＝見やすく）。
+// OVA・劇場版は従来どおり全クールの後ろ（順番は変えない）。
+const SEASON_ORDER_DISPLAY = { FALL: 0, SUMMER: 1, SPRING: 2, WINTER: 3, OVA: 4, MOVIE: 5 };
+const CURRENT_YEAR = new Date().getFullYear();
+// 現行年は放送進行に沿った暦順（冬→秋）、過去年は逆順（秋→冬）で表示する。
+function seasonOrder(year) { return year === CURRENT_YEAR ? SEASON_ORDER : SEASON_ORDER_DISPLAY; }
 const STATUS_NEXT = { unwatched: "watching", watching: "done", done: "maybe", maybe: "unwatched" };
 const STATUS_JA = { done: "視聴済", watching: "視聴中", maybe: "多分視聴済", unwatched: "未マーク" };
+const FMT_JA = { TV: "TV", SHORT: "ショート", OVA: "OVA", MOVIE: "劇場アニメ" };
+// 複数選択フィルタの対象キー（「すべて」= 全キー選択状態）
+const STATUS_KEYS = ["done", "watching", "maybe", "unwatched"];
+const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 
 let catalog = [];
 let years = [];
 let watch = loadWatch();
 let view = { mode: "year", year: null };   // mode: "year" | "collection"
 let query = "";
-let statusFilter = "all";
-let formatFilter = "all";
+let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
+let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
 
@@ -315,6 +325,8 @@ function init() {
   document.getElementById("src-note").textContent =
     `生成日 ${cat.created || cat.generated} ／ 更新日 ${cat.generated}`;
   applyScoreVisibility();
+  syncChips("filters", "f", statusFilter, STATUS_KEYS);
+  syncChips("formatfilters", "ff", formatFilter, FORMAT_KEYS);
   renderYearbar();
   render();
   syncYearbars();
@@ -375,24 +387,41 @@ function toggleYear(y) {
 }
 function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
-/* ---------- filters ---------- */
+/* ---------- filters（複数選択トグル） ----------
+   「すべて」= 全選択状態（個別チップが全点灯）。
+   ・全選択中に「すべて」を押すと全選択解除。
+   ・「すべて」以外を押すと、そのキーだけをトグル（全選択状態からは1つ外れる）。 */
+function toggleFilterSet(set, keys, value) {
+  if (value === "all") {
+    if (set.size === keys.length) set.clear();          // 全選択 → 全解除
+    else { set.clear(); keys.forEach(k => set.add(k)); } // それ以外 → 全選択
+  } else {
+    if (set.has(value)) set.delete(value); else set.add(value);
+  }
+}
+function syncChips(containerId, attr, set, keys) {
+  document.querySelectorAll(`#${containerId} .chip`).forEach(c => {
+    const v = c.dataset[attr];
+    const active = v === "all" ? set.size === keys.length : set.has(v);
+    c.classList.toggle("active", active);
+  });
+}
 function setFilter(f) {
-  statusFilter = f;
-  document.querySelectorAll("#filters .chip").forEach(c => c.classList.toggle("active", c.dataset.f === f));
+  toggleFilterSet(statusFilter, STATUS_KEYS, f);
+  syncChips("filters", "f", statusFilter, STATUS_KEYS);
   render();
 }
 function setFormat(f) {
-  formatFilter = f;
-  document.querySelectorAll("#formatfilters .chip").forEach(c => c.classList.toggle("active", c.dataset.ff === f));
+  toggleFilterSet(formatFilter, FORMAT_KEYS, f);
+  syncChips("formatfilters", "ff", formatFilter, FORMAT_KEYS);
   render();
 }
 function onSearch() { query = document.getElementById("search").value.trim().toLowerCase(); render(); }
 
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
-  if (formatFilter !== "all" && a.f !== formatFilter) return false;
-  if (statusFilter === "all") return true;
-  return statusOf(a.id) === statusFilter;
+  if (!formatFilter.has(a.f)) return false;
+  return statusFilter.has(statusOf(a.id));
 }
 
 /* ---------- stats ---------- */
@@ -501,7 +530,9 @@ function recentGroupsHtml(items) {
 function seasonGroupsHtml(items, year) {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
-  const seasons = Object.keys(bySeason).sort((a, b) => (SEASON_ORDER[a] ?? 9) - (SEASON_ORDER[b] ?? 9));
+  // 視聴コレクションは現行年も含め全年を逆順（秋→冬）。年別ページのみ現行年は暦順を維持。
+  const order = view.mode === "collection" ? SEASON_ORDER_DISPLAY : seasonOrder(year);
+  const seasons = Object.keys(bySeason).sort((a, b) => (order[a] ?? 9) - (order[b] ?? 9));
   return seasons.map(s => {
     const arr = bySeason[s].sort((a, b) => (b.sc || 0) - (a.sc || 0));
     const shortCount = arr.filter(a => a.f === "SHORT").length;
@@ -684,14 +715,94 @@ function updatePoster(id) {
   });
 }
 
-/* ---------- import / export (JSON) ---------- */
-function exportWatch() {
-  const blob = new Blob([JSON.stringify(watch, null, 2)], { type: "application/json" });
+/* ---------- export（JSON / CSV / JPEG をまとめて選択） ----------
+   書き出し形式メニューを開き、選んだ拡張子で保存する。 */
+function openExportMenu(e) {
+  e.preventDefault();
+  e.stopPropagation();   // この click で document の閉じハンドラに伝播させない
+  hideCtxMenu();
+  const m = document.getElementById("exportmenu");
+  m.innerHTML = `
+    <div class="ctx-title">書き出し形式を選択</div>
+    <div class="ctx-item" onclick="exportData('json')">🗎 JSON（バックアップ・読み込み用）</div>
+    <div class="ctx-item" onclick="exportData('csv')">📊 CSV（表計算ソフト用）</div>
+    <div class="ctx-item" onclick="exportData('jpeg')">🖼 JPEG（画像で保存）</div>`;
+  m.classList.add("show");
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
+}
+function hideExportMenu() { document.getElementById("exportmenu").classList.remove("show"); }
+document.addEventListener("click", hideExportMenu);
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideExportMenu(); });
+
+// ファイル保存の共通処理。File System Access API があれば「上書き保存」ダイアログを使い、
+// 同じ名前（=同じ日付）のファイルを選べば (1) を付けずに上書きできる。
+// 非対応ブラウザ（Firefox/Safari等）は従来のダウンロードにフォールバック。
+async function saveFile(blob, filename, toastMsg) {
+  if (window.showSaveFilePicker) {
+    const ext = filename.slice(filename.lastIndexOf(".") + 1).toLowerCase();
+    const accept = ext === "json" ? { "application/json": [".json"] }
+                 : ext === "csv"  ? { "text/csv": [".csv"] }
+                 : { "image/jpeg": [".jpg", ".jpeg"] };
+    try {
+      const handle = await window.showSaveFilePicker({
+        suggestedName: filename,
+        types: [{ description: ext.toUpperCase() + " ファイル", accept }],
+      });
+      const w = await handle.createWritable();
+      await w.write(blob);
+      await w.close();
+      toast(toastMsg);
+      return;
+    } catch (e) {
+      if (e && e.name === "AbortError") return;   // ユーザーがキャンセル
+      // それ以外（権限拒否等）は従来方式にフォールバック
+    }
+  }
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
-  a.href = url; a.download = "anime-watch-" + new Date().toISOString().slice(0, 10) + ".json";
+  a.href = url; a.download = filename;
   a.click(); URL.revokeObjectURL(url);
+  toast(toastMsg);
 }
+
+function exportData(format) {
+  hideExportMenu();
+  const date = new Date().toISOString().slice(0, 10);
+  if (format === "json") {
+    const blob = new Blob([JSON.stringify(watch, null, 2)], { type: "application/json" });
+    saveFile(blob, `anime-watch-${date}.json`, "JSONで書き出しました");
+  } else if (format === "csv") {
+    exportCsv(date);
+  } else {
+    exportImage(date);
+  }
+}
+
+// CSV のセルをエスケープ（カンマ・改行・引用符を含む場合のみ "" で囲む）
+function csvCell(v) {
+  const s = String(v == null ? "" : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+function exportCsv(date) {
+  const watched = catalog.filter(a => statusOf(a.id) !== "unwatched");
+  if (watched.length === 0) { alert("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
+  // 書き出しは視聴コレクションと同じく全年を逆順（秋→冬）で並べる。
+  watched.sort((a, b) => b.y - a.y
+    || (SEASON_ORDER_DISPLAY[a.s] ?? 9) - (SEASON_ORDER_DISPLAY[b.s] ?? 9)
+    || (b.sc || 0) - (a.sc || 0));
+  const head = ["ID", "タイトル", "原題", "年", "区分", "形式", "視聴状態", "評価"];
+  const rows = watched.map(a => [
+    a.id, a.t, a.tr || "", a.y, SEASON_JA[a.s] || a.s,
+    FMT_JA[a.f] || a.f, STATUS_JA[statusOf(a.id)], a.sc ? (a.sc / 10).toFixed(1) : "",
+  ]);
+  const csv = [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
+  // 先頭に BOM を付け、Excel で日本語が文字化けしないようにする
+  const blob = new Blob(["﻿" + csv], { type: "text/csv;charset=utf-8" });
+  saveFile(blob, `anime-watch-${date}.csv`, "CSVで書き出しました");
+}
+
 function importWatch() {
   const inp = document.createElement("input");
   inp.type = "file"; inp.accept = "application/json";
@@ -715,10 +826,11 @@ function importWatch() {
 /* ---------- export as JPEG image ----------
    AniListのポスター画像は他オリジンのためcanvasを汚染しJPEG化できない。
    そこで視聴済/視聴中タイトルをテキスト描画したまとめ画像を生成する。 */
-function exportImage() {
+function exportImage(date) {
+  date = date || new Date().toISOString().slice(0, 10);
   const watched = catalog.filter(a => statusOf(a.id) !== "unwatched");
   if (watched.length === 0) { alert("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
-  watched.sort((a, b) => b.y - a.y || (SEASON_ORDER[a.s] ?? 9) - (SEASON_ORDER[b.s] ?? 9) || (b.sc || 0) - (a.sc || 0));
+  watched.sort((a, b) => b.y - a.y || (SEASON_ORDER_DISPLAY[a.s] ?? 9) - (SEASON_ORDER_DISPLAY[b.s] ?? 9) || (b.sc || 0) - (a.sc || 0));
 
   const byYear = {};
   for (const a of watched) (byYear[a.y] = byYear[a.y] || []).push(a);
@@ -748,7 +860,7 @@ function exportImage() {
   ctx.fillStyle = "#34d399"; ctx.fillText(`✓ 視聴済 ${done}`, pad, 102);
   ctx.fillStyle = "#fbbf24"; ctx.fillText(`▶ 視聴中 ${wat}`, pad + 170, 102);
   ctx.fillStyle = "#5f6675"; ctx.font = `400 14px ${JP}`;
-  ctx.fillText(`${new Date().toISOString().slice(0, 10)} 書き出し ／ 全${watched.length}作品`, pad, 128);
+  ctx.fillText(`${date} 書き出し ／ 全${watched.length}作品`, pad, 128);
 
   let yy = headerH;
   for (const y of ys) {
@@ -777,11 +889,7 @@ function exportImage() {
 
   canvas.toBlob(b => {
     if (!b) { alert("画像の生成に失敗しました。"); return; }
-    const url = URL.createObjectURL(b);
-    const a = document.createElement("a");
-    a.href = url; a.download = "anime-collection-" + new Date().toISOString().slice(0, 10) + ".jpg";
-    a.click(); URL.revokeObjectURL(url);
-    toast("画像を書き出しました");
+    saveFile(b, `anime-collection-${date}.jpg`, "画像を書き出しました");
   }, "image/jpeg", 0.92);
 }
 
