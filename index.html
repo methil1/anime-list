@@ -98,6 +98,11 @@
   .ytab.collection.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .yearbar-label { color: var(--text-faint); font-size: 0.78rem; margin: 40px 0 -10px; }
 
+  /* 年別折りたたみ */
+  .year-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
+  .year-head-toggle { font-size: 0.9rem; min-width: 1.2em; }
+  .year-block.collapsed .year-block-content { display: none; }
+
   /* Section headings */
   .year-block { margin-top: 40px; }
   .year-head { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
@@ -255,6 +260,7 @@ let query = "";
 let statusFilter = "all";
 let formatFilter = "all";
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
+let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
 
 /* ---------- persistence ---------- */
 function loadWatch() {
@@ -345,6 +351,17 @@ function renderYearbar() {
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function toggleYear(y) {
+  if (collapsedYears.has(y)) {
+    collapsedYears.delete(y);
+  } else {
+    collapsedYears.add(y);
+  }
+  const block = document.getElementById(`year-${y}`);
+  if (block) block.classList.toggle("collapsed");
+  const toggle = block.querySelector(".year-head-toggle");
+  if (toggle) toggle.textContent = collapsedYears.has(y) ? "▶" : "▼";
+}
 function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
 /* ---------- filters ---------- */
@@ -411,15 +428,36 @@ function render() {
     return;
   }
 
+  function countBreakdown(arr) {
+    const short = arr.filter(a => a.f === "SHORT").length;
+    const ova = arr.filter(a => a.f === "OVA").length;
+    const movie = arr.filter(a => a.f === "MOVIE").length;
+    const parts = [];
+    if (short) parts.push(`ショート${short}作品`);
+    if (ova) parts.push(`OVA${ova}作品`);
+    if (movie) parts.push(`映画${movie}作品`);
+    return parts.length ? `${arr.length}作品（内${parts.join("・")}）` : `${arr.length}作品`;
+  }
   if (!grouped) {
-    list.innerHTML = `<div class="year-block">${seasonGroupsHtml(items, view.year)}</div>`;
+    const countText = countBreakdown(items);
+    list.innerHTML = `<div class="year-block"><div class="year-head"><span>${view.year}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span></span></div><div class="year-block-content">${seasonGroupsHtml(items, view.year)}</div></div>`;
   } else {
     const byYear = {};
     for (const a of items) (byYear[a.y] = byYear[a.y] || []).push(a);
     const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
-    list.innerHTML = ys.map(y =>
-      `<div class="year-block"><div class="year-head">${y}年</div>${seasonGroupsHtml(byYear[y], y)}</div>`
-    ).join("");
+    const isCollection = view.mode === "collection";
+    list.innerHTML = ys.map(y => {
+      const collapsed = collapsedYears.has(y);
+      const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${y}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
+      const headBtn = isCollection ? `onclick="toggleYear(${y})"` : "";
+      const yearItems = byYear[y];
+      const countText = countBreakdown(yearItems);
+      const yearLabel = `${y}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span>`;
+      return `<div class="year-block ${collapsed ? "collapsed" : ""}" id="year-${y}">
+        <div class="year-head" ${headBtn}>${toggle}<span>${yearLabel}</span></div>
+        <div class="year-block-content">${seasonGroupsHtml(yearItems, y)}</div>
+      </div>`;
+    }).join("");
   }
 }
 
@@ -437,10 +475,12 @@ function recentGroupsHtml(items) {
   const dates = Object.keys(byDate).sort().reverse();
   return dates.map(d => {
     const arr = byDate[d].slice().sort((x, y) => (y.y - x.y) || ((y.sc || 0) - (x.sc || 0)));
+    const shortCount = arr.filter(a => a.f === "SHORT").length;
+    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
     return `<section class="cour">
       <div class="cour-head s-recent">
         <span class="season">${d} に追加</span>
-        <span class="count">${arr.length}作品</span>
+        <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
       <div class="grid">${arr.map(posterHtml).join("")}</div>
@@ -453,12 +493,14 @@ function seasonGroupsHtml(items, year) {
   const seasons = Object.keys(bySeason).sort((a, b) => (SEASON_ORDER[a] ?? 9) - (SEASON_ORDER[b] ?? 9));
   return seasons.map(s => {
     const arr = bySeason[s].sort((a, b) => (b.sc || 0) - (a.sc || 0));
+    const shortCount = arr.filter(a => a.f === "SHORT").length;
+    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
     const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
     return `<section class="cour">
       <div class="cour-head ${SEASON_CLS[s] || ""}">
         <span class="season">${label}</span>
-        <span class="count">${arr.length}作品</span>
+        <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
       <div class="grid">${arr.map(posterHtml).join("")}</div>
