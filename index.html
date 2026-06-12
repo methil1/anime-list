@@ -300,6 +300,20 @@ function init() {
   applyScoreVisibility();
   renderYearbar();
   render();
+  syncYearbars();
+}
+
+/* ---------- yearbar sync ---------- */
+function syncYearbars() {
+  const top = document.getElementById("yearbar");
+  const bottom = document.getElementById("yearbar-bottom");
+  if (!top || !bottom) return;
+  let syncing = false;
+  const sync = (from, to) => {
+    if (!syncing) { syncing = true; to.scrollLeft = from.scrollLeft; syncing = false; }
+  };
+  top.addEventListener("scroll", () => sync(top, bottom));
+  bottom.addEventListener("scroll", () => sync(bottom, top));
 }
 
 /* ---------- score visibility ---------- */
