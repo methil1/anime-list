@@ -165,6 +165,13 @@
   /* toast */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: 0 12px 30px -10px rgba(0,0,0,.7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  /* Context menu (右クリック) */
+  .ctx-menu { position: fixed; z-index: 70; min-width: 190px; max-width: 290px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 16px 40px -12px rgba(0,0,0,.8); padding: 6px; display: none; }
+  .ctx-menu.show { display: block; }
+  .ctx-menu .ctx-title { padding: 7px 10px 6px; font-size: 0.78rem; color: var(--text-faint); border-bottom: 1px solid var(--border); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .ctx-menu .ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 0.86rem; color: var(--text); cursor: pointer; user-select: none; }
+  .ctx-menu .ctx-item:hover { background: var(--bg-elev); color: var(--accent-soft); }
 </style>
 </head>
 <body>
@@ -209,7 +216,6 @@
       <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
       <button class="chip" data-ff="OVA" onclick="setFormat('OVA')">OVA</button>
       <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場アニメ</button>
-      <button class="chip" data-ff="UPDATE" onclick="setFormat('UPDATE')">更新分</button>
     </div>
   </div>
 
@@ -231,6 +237,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<div class="ctx-menu" id="ctxmenu"></div>
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
@@ -247,7 +254,6 @@ let view = { mode: "year", year: null };   // mode: "year" | "collection"
 let query = "";
 let statusFilter = "all";
 let formatFilter = "all";
-let latestUpdate = "";   // 最新の追加日（更新分フィルタ用）
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 
 /* ---------- persistence ---------- */
@@ -287,7 +293,6 @@ function init() {
     return;
   }
   catalog = cat.anime;
-  latestUpdate = catalog.reduce((m, a) => (a.a && a.a > m) ? a.a : m, "");
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   view.year = years[0];
   document.getElementById("src-note").textContent =
@@ -343,8 +348,7 @@ function onSearch() { query = document.getElementById("search").value.trim().toL
 
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
-  if (formatFilter === "UPDATE") { if (a.a !== latestUpdate) return false; }
-  else if (formatFilter !== "all" && a.f !== formatFilter) return false;
+  if (formatFilter !== "all" && a.f !== formatFilter) return false;
   if (statusFilter === "all") return true;
   return statusOf(a.id) === statusFilter;
 }
@@ -375,8 +379,6 @@ function render() {
       ((a.t && a.t.toLowerCase().includes(query)) || (a.tr && a.tr.toLowerCase().includes(query))));
   } else if (view.mode === "collection") {
     items = catalog.filter(a => statusOf(a.id) !== "unwatched" && passStatus(a));
-  } else if (formatFilter === "UPDATE") {
-    items = catalog.filter(a => passStatus(a));   // 更新分は年代横断で表示
   } else {
     items = catalog.filter(a => a.y === view.year && passStatus(a));
     grouped = false;
@@ -462,7 +464,7 @@ function posterHtml(a) {
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
-  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return openWiki(event,${a.id})" title="${esc(a.t)} ／ クリックで視聴区分切替 ／ 右クリックでWikipedia">
+  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" title="${esc(a.t)} ／ クリックで視聴区分切替 ／ 右クリックでメニュー">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
     <span class="status">${st === "done"
@@ -492,17 +494,79 @@ function cycle(id) {
   updatePoster(id);
   toast(STATUS_JA[next] + " にしました");
 }
-/* ---------- Wikipedia (右クリック) ---------- */
-function wikiUrl(a) {
-  // 日本語Wikipediaをタイトルで検索（完全一致なら記事へ直行、無ければ検索結果）
-  const q = encodeURIComponent(a.t || a.tr || "");
-  return `https://ja.wikipedia.org/wiki/Special:Search?search=${q}&go=Go`;
-}
-function openWiki(e, id) {
+/* ---------- 右クリックメニュー ---------- */
+let ctxOpenedAt = 0;
+function showCtxMenu(e, id) {
   e.preventDefault();
   const a = catalog.find(x => x.id === id);
-  if (a) window.open(wikiUrl(a), "_blank", "noopener");
+  if (!a) return false;
+  ctxOpenedAt = Date.now();
+  const m = document.getElementById("ctxmenu");
+  m.innerHTML = `
+    <div class="ctx-title">${esc(a.t)}</div>
+    <div class="ctx-item" onclick="openWiki(${a.id})">📖 Wikipediaで開く</div>
+    <div class="ctx-item" onclick="openAniList(${a.id})">🌐 AniListで開く</div>`;
+  m.classList.add("show");
+  // 画面端からはみ出さないようカーソル位置に配置
+  const r = m.getBoundingClientRect();
+  m.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
   return false;
+}
+function hideCtxMenu() {
+  document.getElementById("ctxmenu").classList.remove("show");
+}
+document.addEventListener("click", hideCtxMenu);
+document.addEventListener("contextmenu", e => { if (!e.defaultPrevented) hideCtxMenu(); });
+document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtxMenu(); });
+// 表示直後はスクロールで閉じない（慣性スクロールや遅延画像のレイアウト変動対策）
+window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hideCtxMenu(); }, true);
+window.addEventListener("resize", hideCtxMenu);
+
+/* ---------- Wikipedia ---------- */
+const WIKI_API = "https://ja.wikipedia.org/w/api.php?format=json&origin=*";
+const wikiArticleUrl = t => `https://ja.wikipedia.org/wiki/${encodeURIComponent(t)}`;
+
+// タイトルから日本語Wikipediaの記事URLを解決。
+// opensearch は全角/半角・ダッシュ等の表記ゆれを吸収してくれるので、
+// 結果から「タイトル (アニメ)」（アニメ専用ページ）→「タイトル」→ 先頭 の優先順で選ぶ。
+// 該当記事が無い・通信失敗時は検索結果ページにフォールバック。
+// AniListは期ごとに別レコードのため「第2期」等のサフィックス付きが多いが、
+// Wikipediaは作品単位の記事が普通。ヒットしなければサフィックスを外して再解決する。
+const SEASON_SUFFIX_RE = /\s*(第\s*\d+\s*(期|クール|シーズン|シリーズ)|シーズン\s*\d+|Season\s*\d+|\d+(?:st|nd|rd|th)\s+Season|Part\s*\d+|パート\s*\d+)\s*$/i;
+async function resolveWikiUrl(title) {
+  const stripped = title.replace(SEASON_SUFFIX_RE, "").trim();
+  const queries = stripped && stripped !== title ? [title, stripped] : [title];
+  try {
+    for (const q of queries) {
+      const r = await fetch(`${WIKI_API}&action=opensearch&redirects=resolve&limit=5&search=${encodeURIComponent(q)}`);
+      const results = (await r.json())[1] || [];
+      if (!results.length) continue;
+      const norm = s => s.normalize("NFKC");
+      const want = norm(q);
+      const hit = results.find(t => norm(t) === `${want} (アニメ)`)
+               || results.find(t => norm(t) === want)
+               || results[0];
+      return wikiArticleUrl(hit);
+    }
+  } catch (_) { /* オフライン等 → 検索ページへ */ }
+  return `https://ja.wikipedia.org/wiki/Special:Search?search=${encodeURIComponent(title)}&go=Go`;
+}
+function openWiki(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  // ポップアップブロック回避: クリック時に同期で空タブを開き、解決後にURLを差し込む
+  const w = window.open("about:blank", "_blank");
+  if (w) w.opener = null;
+  resolveWikiUrl(a.t || a.tr || "").then(url => {
+    if (w && !w.closed) w.location.href = url;
+    else window.open(url, "_blank", "noopener");
+  });
+}
+function openAniList(id) {
+  hideCtxMenu();
+  window.open(`https://anilist.co/anime/${id}`, "_blank", "noopener");
 }
 function updatePoster(id) {
   const a = catalog.find(x => x.id === id);
