@@ -204,6 +204,8 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       season
       seasonYear
       format
+      countryOfOrigin
+      duration
       averageScore
       genres
       coverImage { medium }
@@ -339,12 +341,32 @@ def _fetch_yearly_once(year, fmt):
             print(f"    GraphQL error: {data['errors']}", flush=True)
             break
         pg = data["data"]["Page"]
-        items.extend(pg["media"])
+        # 中国制作・短編の劇場版は取得段階で除外（OVA等は is_excluded_movie が素通し）
+        items.extend(m for m in pg["media"] if not is_excluded_movie(m))
         if not pg["pageInfo"]["hasNextPage"]:
             break
         page += 1
         time.sleep(1.2)
     return items
+
+
+# 上映時間がこの分数以下の劇場版は短編・PV的小品として除外する。
+MOVIE_MIN_DURATION = 20
+
+
+def is_excluded_movie(m):
+    """劇場(MOVIE)の除外対象を判定する。
+    1) 中国制作(countryOfOrigin=CN)の劇場版（donghua）。字面では日本と区別
+       できないが countryOfOrigin で機械的に分離できる。
+    2) 上映時間が MOVIE_MIN_DURATION 分以下の劇場版（短編・特典映像・PV的小品）。
+       duration 不明(None)は過剰除外を避けるため保持する。
+    MOVIE 以外（OVA など）は対象外。"""
+    if (m.get("format") or "") != "MOVIE":
+        return False
+    if (m.get("countryOfOrigin") or "") == "CN":
+        return True
+    dur = m.get("duration")
+    return dur is not None and dur <= MOVIE_MIN_DURATION
 
 
 def fetch_movies(year, retry_on_empty=False):
