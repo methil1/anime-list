@@ -44,6 +44,66 @@ HANGUL_RE = re.compile(r"[가-힣ᄀ-ᇿ㄰-㆏ꥠ-꥿ힰ-퟿]")
 def has_hangul(rec):
     return bool(HANGUL_RE.search(rec.get("t") or "")) or bool(HANGUL_RE.search(rec.get("tr") or ""))
 
+
+# PV・ティザー・CM・MV・YouTube限定ミニアニメ等の宣伝/おまけ映像を除外する判定。
+# ONA一括取込(--ona-jp)で混入しやすい。PV/CM/MV は前後に英数字が無い単独トークンのみ一致。
+PROMO_RE = re.compile(
+    r"ティザー|予告|特報|番宣|ミニアニメ|ぷちアニメ|ミュージックビデオ|ノンクレジット"
+    r"|Music\s*Video|Teaser|Trailer|Promotion(?:al)?(?:\s*Video)?"
+    r"|(?<![A-Za-z0-9])(?:PV|CM|MV)s?(?![A-Za-z0-9])",
+    re.IGNORECASE,
+)
+
+
+def is_promo(m):
+    """AniList media がPV/ティザー/ミニアニメ等の宣伝・おまけ映像かをタイトルで判定。"""
+    t = m.get("title") or {}
+    return bool(PROMO_RE.search(f"{t.get('native') or ''} / {t.get('romaji') or ''}"))
+
+
+# 無料動画サイトのみで配信されるONA（Web限定ミニアニメ等）を除外するための判定。
+# ストリーミングリンクが以下のサイトだけの作品は正規配信が無いとみなす。
+FREE_VIDEO_SITES = {"youtube", "twitter", "vimeo"}
+
+
+def is_free_video_only(m):
+    """配信が YouTube/Twitter/Vimeo のみの作品か。
+
+    STREAMINGリンクがあればそれだけで判定。無い場合（Twitter限定ミニ等は
+    SOCIALリンクのみのことがある）は全リンクで判定し、公式サイト等が
+    1つでもあれば保持。リンク情報が皆無なら判定不能として保持。
+    """
+    links = m.get("externalLinks") or []
+    streaming = [(l.get("site") or "").lower() for l in links if l.get("type") == "STREAMING"]
+    if streaming:
+        return all(s in FREE_VIDEO_SITES for s in streaming)
+    sites = [(l.get("site") or "").lower() for l in links]
+    return bool(sites) and all(s in FREE_VIDEO_SITES for s in sites)
+
+
+# ONA除外フィルタ(is_promo/is_free_video_only/is_minor_ona)を適用しない保持リスト。
+# AniListのデータ不備(スタッフ1人登録等)で機械判定に引っかかる有名作をここに足す。
+# 人気度では分離不可(刃牙道2806 < からめるハニー5259 等)のため手動リストで管理。
+ONA_KEEP_IDS = {
+    20962,   # ヘタリア The World Twinkle
+    19469,   # 斉木楠雄のΨ難 (ONA)
+    210032,  # 刃牙道 第2クール
+    21678,   # 暗殺教室 2 課外授業編
+    20859,   # 逃亡者・毛利小五郎
+}
+
+
+def is_minor_ona(m):
+    """1話1分の作品・スタッフ登録が1人の作品（ロゴ映像/個人制作の小品）を判定。
+
+    注: staff の pageInfo.total はAniListが不正確な値(500等)を返すため、
+    perPage:2 で取得した edges の件数で「1人」を判定する。
+    """
+    if (m.get("duration") or 0) == 1:
+        return True
+    edges = ((m.get("staff") or {}).get("edges"))
+    return edges is not None and len(edges) == 1
+
 API_URL = "https://graphql.anilist.co"
 OUT_PATH = "anime-data.js"
 
@@ -122,6 +182,9 @@ query ($page: Int) {
       coverImage { medium }
       startDate { year month }
       popularity
+      duration
+      externalLinks { site type }
+      staff(perPage: 2) { edges { node { id } } }
     }
   }
 }
@@ -470,6 +533,13 @@ def run_ona_jp_merge(floor):
         if m["id"] in seen:
             continue
         seen.add(m["id"])
+        if m["id"] not in ONA_KEEP_IDS:   # 保持リストの作品は除外フィルタをバイパス
+            if is_promo(m):   # PV/ティザー/CM/ミニアニメ等は本編ではないので除外
+                continue
+            if is_free_video_only(m):   # YouTube/Twitter/Vimeoのみ配信のWeb限定作品は除外
+                continue
+            if is_minor_ona(m):   # 1話1分・スタッフ1人の小品は除外
+                continue
         sd = m.get("startDate") or {}
         season = m.get("season") or _season_from_month(sd.get("month")) or "WINTER"
         yr = m.get("seasonYear") or sd.get("year") or date.today().year
