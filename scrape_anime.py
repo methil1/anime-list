@@ -122,6 +122,51 @@ GENRE_JA = {
     "Hentai": "成人向け",
 }
 
+# 原作種別（AniList source enum）の日本語化。ホバー情報カードの「原作」に表示。
+SOURCE_JA = {
+    "ORIGINAL": "オリジナル", "MANGA": "漫画", "LIGHT_NOVEL": "ライトノベル",
+    "VISUAL_NOVEL": "ビジュアルノベル", "VIDEO_GAME": "ゲーム", "GAME": "ゲーム",
+    "NOVEL": "小説", "WEB_NOVEL": "Web小説", "DOUJINSHI": "同人誌",
+    "ANIME": "アニメ", "MANHWA": "漫画", "MANHUA": "漫画", "COMIC": "コミック",
+    "LIVE_ACTION": "実写", "MULTIMEDIA_PROJECT": "メディアミックス",
+    "PICTURE_BOOK": "絵本", "CARD_GAME": "カードゲーム", "MUSIC": "音楽",
+    "OTHER": "その他",
+}
+
+
+def source_ja(m):
+    """AniList の source enum を日本語ラベルに変換（無い/不明なら None）。"""
+    s = m.get("source")
+    return SOURCE_JA.get(s) if s else None
+
+
+def studio_name(m):
+    """制作会社名を取得。isMain の制作会社を優先し、最大2社を「・」連結。"""
+    edges = ((m.get("studios") or {}).get("edges")) or []
+    mains = [e["node"]["name"] for e in edges if e.get("isMain") and e.get("node")]
+    if not mains:
+        mains = [e["node"]["name"] for e in edges if e.get("node")][:1]
+    return "・".join(mains[:2]) if mains else None
+
+
+def char_pairs(m):
+    """メインキャラ（最大5）を [キャラ名, 日本語CV名] の配列で返す。
+    UIは先頭4件を表示し、5件目があれば「…」で続きを示す。CV未登録は名前のみ。"""
+    edges = ((m.get("characters") or {}).get("edges")) or []
+    out = []
+    for e in edges:
+        nm = ((e.get("node") or {}).get("name")) or {}
+        cname = nm.get("native") or nm.get("full")
+        if not cname:
+            continue
+        vas = e.get("voiceActors") or []
+        cv = None
+        if vas:
+            van = vas[0].get("name") or {}
+            cv = van.get("native") or van.get("full")
+        out.append([cname, cv] if cv else [cname])
+    return out or None
+
 # TV / ショート: クール（season + seasonYear）で取得
 QUERY = """
 query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
@@ -137,6 +182,11 @@ query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
       averageScore
       genres
       coverImage { medium }
+      source
+      studios { edges { isMain node { name } } }
+      characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
+        edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
+      }
     }
   }
 }
@@ -158,6 +208,11 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       genres
       coverImage { medium }
       startDate { year }
+      source
+      studios { edges { isMain node { name } } }
+      characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
+        edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
+      }
     }
   }
 }
@@ -185,6 +240,11 @@ query ($page: Int) {
       duration
       externalLinks { site type }
       staff(perPage: 2) { edges { node { id } } }
+      source
+      studios { edges { isMain node { name } } }
+      characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
+        edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
+      }
     }
   }
 }
@@ -292,7 +352,9 @@ def fetch_movies(year, retry_on_empty=False):
 
 
 # 個別追加用: タイトル検索 / ID 指定。ONA など通常対象外の format も取り込む。
-ADD_FIELDS = "id title{romaji native} episodes season seasonYear format averageScore genres coverImage{medium} startDate{year}"
+ADD_FIELDS = ("id title{romaji native} episodes season seasonYear format averageScore genres coverImage{medium} startDate{year} "
+              "source studios{edges{isMain node{name}}} "
+              "characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5){edges{node{name{native full}} voiceActors(language: JAPANESE){name{native full}}}}")
 ADD_BY_ID_QUERY = "query ($id: Int) { Media(id: $id, type: ANIME) { %s } }" % ADD_FIELDS
 ADD_SEARCH_QUERY = "query ($q: String) { Page(perPage: 1) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { %s } } }" % ADD_FIELDS
 
@@ -319,7 +381,7 @@ def make_record(m, year, season, force_fmt=None):
     else:
         yr = m.get("seasonYear") or year
         s = m.get("season") or season
-    return {
+    rec = {
         "id": m["id"],
         "t": title.get("native") or title.get("romaji") or "(不明)",
         "tr": title.get("romaji") or "",
@@ -332,6 +394,24 @@ def make_record(m, year, season, force_fmt=None):
         "g": genres,
         "a": date.today().isoformat(),  # カタログへの追加日（新着表示用）
     }
+    enrich_record(rec, m)
+    return rec
+
+
+def enrich_record(rec, m):
+    """ホバー情報カード用の原作(src)/制作(st)/メインキャラ(ch)をレコードに付与。
+    取得できた項目だけ追加し、ch は「処理済み」を表すため空でも [] を入れる。"""
+    src = source_ja(m)
+    if src:
+        rec["src"] = src
+    else:
+        rec.pop("src", None)
+    st = studio_name(m)
+    if st:
+        rec["st"] = st
+    else:
+        rec.pop("st", None)
+    rec["ch"] = char_pairs(m) or []
 
 
 # 同一年内の表示順: クール（冬春夏秋）→ OVA → 劇場
@@ -549,6 +629,55 @@ def run_ona_jp_merge(floor):
     print(f"\n完了: JP-ONA を {added} 件追加（ハングル除外後の総数は再読込で確認）。", flush=True)
 
 
+# 既存カタログに原作/制作/メインキャラを後付けするエンリッチ用クエリ（id_in でバッチ取得）。
+ENRICH_QUERY = """
+query ($ids: [Int]) {
+  Page(perPage: 25) {
+    media(id_in: $ids) {
+      id
+      source
+      studios { edges { isMain node { name } } }
+      characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
+        edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
+      }
+    }
+  }
+}
+"""
+
+
+def run_enrich(force=False, batch=20):
+    """既存 anime-data.js の各作品に原作(src)/制作(st)/メインキャラ(ch)を後付けする。
+    ch フィールドが無いものだけを対象に id_in でバッチ取得（中断後の再実行で続きから）。
+    force=True で全件再取得。途中で定期チェックポイント保存する。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime if force or "ch" not in a]
+    print(f"エンリッチ対象: {len(todo)} / 全 {len(anime)} 件 (batch={batch})", flush=True)
+    done = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(ENRICH_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    GraphQL error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        for m in data["data"]["Page"]["media"]:
+            a = by_id.get(m["id"])
+            if a is not None:
+                enrich_record(a, m)
+        done += len(ids)
+        step = i // batch
+        if step % 20 == 0:
+            print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        if step and step % 50 == 0:
+            write_catalog(anime)  # 定期チェックポイント（中断対策）
+        time.sleep(1.0)
+    write_catalog(anime)
+    print(f"\n完了: {done} 件をエンリッチしました（{OUT_PATH} 更新済み）。", flush=True)
+
+
 ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下限
 
 
@@ -600,6 +729,9 @@ def main():
     args = sys.argv[1:]
     if args and args[0] == "--update":
         run_update()
+    elif args and args[0] == "--enrich":
+        force = "--force" in args
+        run_enrich(force=force)
     elif args and args[0] == "--ona-jp":
         floor = int(args[1]) if len(args) > 1 else 2000
         run_ona_jp_merge(floor)

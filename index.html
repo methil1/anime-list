@@ -177,6 +177,16 @@
   .ctx-menu .ctx-title { padding: 7px 10px 6px; font-size: 0.78rem; color: var(--text-faint); border-bottom: 1px solid var(--border); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctx-menu .ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 0.86rem; color: var(--text); cursor: pointer; user-select: none; }
   .ctx-menu .ctx-item:hover { background: var(--bg-elev); color: var(--accent-soft); }
+  /* ホバー情報カード（作品名/原作/制作/メインキャラ） */
+  .info-card { position: fixed; z-index: 65; min-width: 200px; max-width: 300px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 16px 40px -12px rgba(0,0,0,.85); padding: 11px 13px; display: none; pointer-events: none; }
+  .info-card.show { display: block; }
+  .info-card .ic-title { font-size: 0.9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: 7px; }
+  .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
+  .info-card .ic-k { flex: 0 0 auto; color: var(--text-faint); }
+  .info-card .ic-chars { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); display: grid; gap: 3px; }
+  .info-card .ic-char { font-size: 0.81rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .info-card .ic-cv { color: var(--accent-soft); }
+  .info-card .ic-more { color: var(--text-faint); }
 </style>
 </head>
 <body>
@@ -243,6 +253,7 @@
 
 <div class="toast" id="toast"></div>
 <div class="ctx-menu" id="ctxmenu"></div>
+<div class="info-card" id="infocard"></div>
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
@@ -520,7 +531,7 @@ function posterHtml(a) {
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
-  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" title="${esc(a.t)} ／ クリックで視聴区分切替 ／ 右クリックでメニュー">
+  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
     <span class="status">${st === "done"
@@ -556,6 +567,7 @@ function showCtxMenu(e, id) {
   e.preventDefault();
   const a = catalog.find(x => x.id === id);
   if (!a) return false;
+  hideInfo();
   ctxOpenedAt = Date.now();
   const m = document.getElementById("ctxmenu");
   m.innerHTML = `
@@ -578,6 +590,42 @@ document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtxMenu(
 // 表示直後はスクロールで閉じない（慣性スクロールや遅延画像のレイアウト変動対策）
 window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hideCtxMenu(); }, true);
 window.addEventListener("resize", hideCtxMenu);
+
+/* ---------- ホバー情報カード ---------- */
+function showInfo(e, id) {
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  const card = document.getElementById("infocard");
+  const ch = a.ch || [];
+  const shown = ch.slice(0, 4);
+  const chars = shown.map((c, i) => {
+    const more = (i === shown.length - 1 && ch.length > 4) ? ' <span class="ic-more">…</span>' : "";
+    const cv = c[1] ? ` <span class="ic-cv">${esc(c[1])}</span>` : "";
+    return `<div class="ic-char">${esc(c[0])}${cv}${more}</div>`;
+  }).join("");
+  card.innerHTML =
+    `<div class="ic-title">${esc(a.t)}</div>` +
+    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}</div>` : "") +
+    (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(a.st)}</div>` : "") +
+    (chars ? `<div class="ic-chars">${chars}</div>` : "");
+  card.classList.add("show");
+  positionInfo(e.currentTarget, card);
+}
+function positionInfo(poster, card) {
+  const pr = poster.getBoundingClientRect();
+  const cr = card.getBoundingClientRect();
+  let left = pr.right + 8;
+  if (left + cr.width > window.innerWidth - 8) left = pr.left - cr.width - 8;
+  if (left < 4) left = 4;
+  let top = pr.top;
+  if (top + cr.height > window.innerHeight - 8) top = window.innerHeight - cr.height - 8;
+  if (top < 4) top = 4;
+  card.style.left = left + "px";
+  card.style.top = top + "px";
+}
+function hideInfo() {
+  document.getElementById("infocard").classList.remove("show");
+}
 
 /* ---------- Wikipedia ---------- */
 const WIKI_API = "https://ja.wikipedia.org/w/api.php?format=json&origin=*";
