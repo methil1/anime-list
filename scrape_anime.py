@@ -160,6 +160,16 @@ def studio_name(m):
     return "・".join(mains[:2]) if mains else None
 
 
+def official_site_url(m):
+    """External & Streaming Links の「Official Site」(type INFO) の URL を返す（無ければ None）。
+    右クリックメニューの「公式サイトを開く」用。AniList では公式サイトは type=INFO・
+    site="Official Site" で登録される。"""
+    for l in (m.get("externalLinks") or []):
+        if l.get("type") == "INFO" and (l.get("site") or "").strip().lower() == "official site":
+            return l.get("url") or None
+    return None
+
+
 def char_pairs(m):
     """メインキャラ（最大5）を [キャラ名, 日本語CV名] の配列で返す。
     UIは先頭4件を表示し、5件目があれば「…」で続きを示す。CV未登録は名前のみ。"""
@@ -193,6 +203,7 @@ query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
       averageScore
       genres
       coverImage { medium }
+      externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
@@ -221,6 +232,7 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       genres
       coverImage { medium }
       startDate { year }
+      externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
@@ -251,7 +263,7 @@ query ($page: Int) {
       startDate { year month }
       popularity
       duration
-      externalLinks { site type }
+      externalLinks { site type url }
       staff(perPage: 2) { edges { node { id } } }
       source
       studios { edges { isMain node { name } } }
@@ -386,7 +398,7 @@ def fetch_movies(year, retry_on_empty=False):
 
 # 個別追加用: タイトル検索 / ID 指定。ONA など通常対象外の format も取り込む。
 ADD_FIELDS = ("id title{romaji native} episodes season seasonYear format averageScore genres coverImage{medium} startDate{year} "
-              "source studios{edges{isMain node{name}}} "
+              "externalLinks{site type url} source studios{edges{isMain node{name}}} "
               "characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5){edges{node{name{native full}} voiceActors(language: JAPANESE){name{native full}}}}")
 ADD_BY_ID_QUERY = "query ($id: Int) { Media(id: $id, type: ANIME) { %s } }" % ADD_FIELDS
 ADD_SEARCH_QUERY = "query ($q: String) { Page(perPage: 1) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { %s } } }" % ADD_FIELDS
@@ -444,6 +456,11 @@ def enrich_record(rec, m):
         rec["st"] = st
     else:
         rec.pop("st", None)
+    os_url = official_site_url(m)
+    if os_url:
+        rec["os"] = os_url
+    else:
+        rec.pop("os", None)
     rec["ch"] = char_pairs(m) or []
 
 
@@ -670,6 +687,7 @@ query ($ids: [Int]) {
   Page(perPage: 25) {
     media(id_in: $ids) {
       id
+      externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
