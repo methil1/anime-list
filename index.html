@@ -107,7 +107,11 @@
   .year-block { margin-top: 40px; }
   .year-head { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
   .cour { margin-top: 26px; }
-  .cour-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 9px; margin-bottom: 16px; }
+  .cour-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 9px; margin-bottom: 16px; cursor: pointer; user-select: none; }
+  .cour-head-toggle { font-size: 0.8rem; min-width: 1.1em; color: var(--text-faint); }
+  .cour-head.s-recent { cursor: default; }
+  .cour.collapsed .grid { display: none; }
+  .cour.collapsed .cour-head { margin-bottom: 0; }
   .cour-head .season { font-size: 1.15rem; font-weight: 700; }
   .cour-head .count { color: var(--text-faint); font-size: 0.82rem; }
   .cour-head .line { flex: 1; }
@@ -282,6 +286,7 @@ let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 =
 let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
+let collapsedCours = new Set();   // 折りたたみ中のクール（キー=`${year}-${season}`）
 
 /* ---------- persistence ---------- */
 function loadWatch() {
@@ -384,6 +389,14 @@ function toggleYear(y) {
   if (block) block.classList.toggle("collapsed");
   const toggle = block.querySelector(".year-head-toggle");
   if (toggle) toggle.textContent = collapsedYears.has(y) ? "▶" : "▼";
+}
+function toggleCour(key) {
+  const block = document.getElementById(`cour-${key}`);
+  if (!block) return;
+  if (collapsedCours.has(key)) collapsedCours.delete(key); else collapsedCours.add(key);
+  block.classList.toggle("collapsed");
+  const toggle = block.querySelector(".cour-head-toggle");
+  if (toggle) toggle.textContent = collapsedCours.has(key) ? "▶" : "▼";
 }
 function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
@@ -539,8 +552,11 @@ function seasonGroupsHtml(items, year) {
     const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
     const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
-    return `<section class="cour">
-      <div class="cour-head ${SEASON_CLS[s] || ""}">
+    const courKey = `${year}-${s}`;
+    const courCollapsed = collapsedCours.has(courKey);
+    return `<section class="cour ${courCollapsed ? "collapsed" : ""}" id="cour-${courKey}">
+      <div class="cour-head ${SEASON_CLS[s] || ""}" onclick="toggleCour('${courKey}')">
+        <span class="cour-head-toggle">${courCollapsed ? "▶" : "▼"}</span>
         <span class="season">${label}</span>
         <span class="count">${countText}</span>
         <span class="line"></span>

@@ -93,6 +93,17 @@ ONA_KEEP_IDS = {
 }
 
 
+# 手動除外リスト。is_excluded_movie 等の機械判定では拾えないが、
+# カタログに載せたくない作品の AniList ID をここに足す（全モード共通で write_catalog が除外）。
+EXCLUDE_IDS = {
+    176879,  # 箱の時代
+    103549,  # ナヌムの家
+    10149,   # 魔法阿媽 (台湾制作・countryOfOrigin=TWでCNフィルタ外)
+    103456,  # 穴 -the ten hole stories-
+    145442,  # BIBLIOMANIA
+}
+
+
 def is_minor_ona(m):
     """1話1分の作品・スタッフ登録が1人の作品（ロゴ映像/個人制作の小品）を判定。
 
@@ -444,6 +455,8 @@ def _season_order(s):
 def write_catalog(anime):
     # 韓国作品（ハングルタイトル）は日本のアニメリストから除外
     anime = [a for a in anime if not has_hangul(a)]
+    # 手動除外リスト（EXCLUDE_IDS）の作品を除外
+    anime = [a for a in anime if a["id"] not in EXCLUDE_IDS]
     anime = sorted(anime, key=lambda a: (-a["y"], _season_order(a["s"]), -(a.get("sc") or 0)))
     today = date.today().isoformat()
     # 生成日(created)は初回のものを引き継ぎ、更新日(generated)は毎回今日にする。
