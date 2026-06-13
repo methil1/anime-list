@@ -187,6 +187,7 @@
   .info-card .ic-title { font-size: 0.9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: 7px; }
   .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
   .info-card .ic-k { flex: 0 0 auto; color: var(--text-faint); }
+  .info-card .ic-narou { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-chars { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); display: grid; gap: 3px; }
   .info-card .ic-char { font-size: 0.81rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info-card .ic-cv { color: var(--accent-soft); }
@@ -653,7 +654,7 @@ function showInfo(e, id) {
   }).join("");
   card.innerHTML =
     `<div class="ic-title">${esc(a.t)}</div>` +
-    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}</div>` : "") +
+    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}</div>` : "") +
     (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(a.st)}</div>` : "") +
     (chars ? `<div class="ic-chars">${chars}</div>` : "");
   card.classList.add("show");

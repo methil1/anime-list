@@ -18,6 +18,10 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
     python scrape_anime.py --add "とんがり帽子のアトリエ" 200769
                                         # 個別作品をタイトル検索 or AniList ID で追加。
                                         #   ONA(配信)など通常スクレイプ対象外の作品の取りこぼし補完に使う。
+    python scrape_anime.py --narou      # 原作がライトノベル/Web小説/小説の作品を なろう公式API で
+                                        #   タイトル照合し、なろう発の作品に nr=1 を付与（未判定分のみ）。
+    python scrape_anime.py --narou --force
+                                        # 判定済みも含め全件を再判定。
 
 仕様:
   - TV/ショート: format TV / TV_SHORT を season/seasonYear（放送開始クール）ごとに取得。
@@ -32,8 +36,10 @@ import json
 import re
 import sys
 import time
-import urllib.request
+import unicodedata
 import urllib.error
+import urllib.parse
+import urllib.request
 from datetime import date
 
 # ハングル（韓国語）を含むタイトルを除外するための判定。
@@ -731,16 +737,187 @@ def run_enrich(force=False, batch=20):
     print(f"\n完了: {done} 件をエンリッチしました（{OUT_PATH} 更新済み）。", flush=True)
 
 
+# ---------- なろう原作判定 ----------
+# AniList の source はなろう発かどうかを区別しない（書籍化済みは LIGHT_NOVEL になる）ため、
+# なろう公式API (https://dev.syosetu.com/man/api/) でタイトル完全一致検索して判定する。
+# 判定結果は出力レコードの nr フィールドに持つ: 1=なろう発 / 0=判定済み・該当なし / 無し=未判定。
+NAROU_API = "https://api.syosetu.com/novelapi/api/"
+NAROU_SOURCES = {"ライトノベル", "Web小説", "小説"}
+# タイトルが偶然一致した二次創作・パロディ小説を弾く総合評価ポイント下限。
+# 商業アニメ化される原作のポイントは数万〜数十万なので余裕を持って低めに設定。
+NAROU_MIN_POINT = 2000
+
+# 書籍化後になろうから削除された等でAPIでは見つからない作品の手動指定（AniList ID）。
+# 注: src が NAROU_SOURCES のレコードにのみ適用される（run_narou の対象フィルタ）。
+NAROU_FORCE_IDS = {
+    # この素晴らしい世界に祝福を！（本編はなろうから削除済み）
+    21202,   # 1期
+    21574,   # OVA この素晴らしいチョーカーに祝福を!
+    21699,   # 2期
+    97996,   # OVA この素晴らしい芸術に祝福を!
+    102976,  # 劇場版 紅伝説
+    136804,  # 3期
+    150075,  # この素晴らしい世界に爆焔を！（スピンオフ）
+    181244,  # 3期 OVA BONUS STAGE
+    97663,   # ナイツ&マジック（なろうから削除済み）
+    # 魔法科高校の劣等生（本編はなろうから削除済み）
+    20458,   # 1期
+    112300,  # 来訪者編
+    143271,  # 第3シーズン
+    178707,  # 劇場版 四葉継承編
+}
+# なろうに同名小説があるが実際はなろう発ではない作品の手動除外（AniList ID）。
+NAROU_NOT_IDS = set()
+
+# アニメ側タイトル末尾の続編表記（第2期 / 2nd Season / 末尾の「2」「Ⅲ」等）。
+# 除去してから原作タイトルと照合する。
+SEASON_SUFFIX_RE = re.compile(
+    r"[\s　]*(第\s*[0-9０-９]+\s*(期|部|シーズン|クール)|[0-9]+(st|nd|rd|th)\s*season"
+    r"|season\s*[0-9]+|part\s*[0-9]+|[0-9０-９]{1,2}|[ⅠⅡⅢⅣⅤⅥⅦⅰ-ⅶ])\s*$",
+    re.IGNORECASE,
+)
+
+
+def strip_season_suffix(title):
+    """末尾の続編表記を繰り返し除去（「〜 第2期 Part 2」のような多段にも対応）。"""
+    prev = None
+    while title != prev:
+        prev = title
+        title = SEASON_SUFFIX_RE.sub("", title)
+    return title.strip()
+
+
+# 日本語タイトルの「本文」と見なす文字（英数・かな・カタカナ・長音・漢字）。
+# ～/－/・/！等の記号はアニメ側と小説側で表記が揺れるため、照合からは除外する。
+WORD_CHARS = r"0-9a-zA-Zぁ-んァ-ヶー一-龯々〆"
+
+
+def norm_title(s):
+    """照合用正規化: NFKC → 小文字化 → 記号・空白を全除去。
+    例: 「無職転生 ～異世界行ったら本気だす～」と「無職転生　- 異世界行ったら本気だす -」が一致する。"""
+    s = unicodedata.normalize("NFKC", s or "").lower()
+    return re.sub(f"[^{WORD_CHARS}]", "", s)
+
+
+# なろう側タイトル末尾の注記（「（ web版 ）」「：前編」等）。照合前に除去する。
+# 例: 「デスマーチからはじまる異世界狂想曲（ web版 ）」「オーバーロード：前編」
+NOVEL_ANNOT_RE = re.compile(
+    r"\s*([（(【\[][^（）()【】\[\]]{0,14}[）)】\]]|[:：]?\s*(前|中|後)編)\s*$"
+)
+
+
+def strip_novel_annotations(title):
+    prev = None
+    while title != prev:
+        prev = title
+        title = NOVEL_ANNOT_RE.sub("", title)
+    return title.strip()
+
+
+def narou_queries(title):
+    """なろうAPIに投げる検索ワード候補（優先順）。
+    記号区切りの先頭2区間のAND検索を基本とし（記号の表記揺れを回避しつつ絞り込む）、
+    アニメ側だけの副題で0件になる場合に備えて第1区間のみのフォールバックを返す。"""
+    t = unicodedata.normalize("NFKC", title)
+    chunks = re.findall(f"[{WORD_CHARS}]+", t)
+    if not chunks:
+        return [t]
+    queries = [" ".join(chunks[:2])]
+    if len(chunks) >= 2:
+        queries.append(chunks[0])
+    return queries
+
+
+def narou_search(title, retries=3):
+    """なろうAPIでタイトル検索し小説リスト（dict の list）を返す。通信失敗は None。"""
+    params = urllib.parse.urlencode({
+        "word": title, "title": 1, "order": "hyoka",
+        "out": "json", "lim": 30, "of": "t-gp",
+    })
+    req = urllib.request.Request(
+        NAROU_API + "?" + params,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeCatalog/1.0"},
+    )
+    for _ in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            return data[1:]  # 先頭要素は allcount
+        except (urllib.error.URLError, urllib.error.HTTPError, ValueError) as e:
+            print(f"    narou API error ({e}), retry in 5s...", flush=True)
+            time.sleep(5)
+    return None
+
+
+def is_narou_origin(rec):
+    """なろうAPIに同名小説（評価ポイント閾値以上）があれば なろう発 と判定。
+    通信失敗で判定できなかった場合は None（未判定のまま次回に持ち越す）。"""
+    q = strip_season_suffix(rec.get("t") or "")
+    if not q:
+        return False
+    key = norm_title(q)
+    failed = False
+    for word in narou_queries(q):
+        novels = narou_search(word)
+        if novels is None:
+            failed = True
+            continue
+        for n in novels:
+            if (n.get("global_point") or 0) < NAROU_MIN_POINT:
+                continue
+            nk = norm_title(strip_novel_annotations(n.get("title") or ""))
+            # 完全一致、またはアニメ側だけに副題が付くケース（「ログ・ホライズン 円卓崩壊」等）
+            # のための前方一致（短すぎる小説タイトルとの偶然一致を避けるため6文字以上に限定）。
+            if nk and (nk == key or (len(nk) >= 6 and key.startswith(nk))):
+                return True
+        time.sleep(0.6)
+    return None if failed else False
+
+
+def run_narou(force=False):
+    """既存カタログの小説系原作の作品をなろうAPIで照合し nr フラグを付与する。
+    未判定（nr 無し）のみ処理。force=True で全件再判定。定期チェックポイント保存あり。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    todo = [a for a in anime if a.get("src") in NAROU_SOURCES and (force or "nr" not in a)]
+    print(f"なろう判定対象: {len(todo)} / 全 {len(anime)} 件", flush=True)
+    hits = 0
+    for i, a in enumerate(todo, 1):
+        if a["id"] in NAROU_NOT_IDS:
+            a["nr"] = 0
+            continue
+        if a["id"] in NAROU_FORCE_IDS:
+            a["nr"] = 1
+            hits += 1
+            continue
+        result = is_narou_origin(a)
+        if result is None:
+            continue  # 通信失敗は未判定のまま（次回実行で再試行）
+        a["nr"] = 1 if result else 0
+        if result:
+            hits += 1
+            print(f"    なろう発: {a['t']}（{a['y']}）", flush=True)
+        if i % 20 == 0:
+            print(f"    {i}/{len(todo)} 件判定 ...", flush=True)
+        if i % 50 == 0:
+            write_catalog(anime)  # 定期チェックポイント（中断対策）
+        time.sleep(1.0)
+    write_catalog(anime)
+    print(f"\n完了: {len(todo)} 件中 {hits} 件をなろう発と判定しました（{OUT_PATH} 更新済み）。", flush=True)
+
+
 ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下限
 
 
 def run_update():
     """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA に加え、
-    人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。"""
+    人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。
+    最後に新規追加分（nr 未判定）のなろう原作判定も行う。"""
     cur = date.today().year
     print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
     run_ona_jp_merge(ONA_JP_FLOOR)
+    run_narou()
 
 
 def run_full(start_year):
@@ -785,6 +962,8 @@ def main():
     elif args and args[0] == "--enrich":
         force = "--force" in args
         run_enrich(force=force)
+    elif args and args[0] == "--narou":
+        run_narou(force="--force" in args)
     elif args and args[0] == "--ona-jp":
         floor = int(args[1]) if len(args) > 1 else 2000
         run_ona_jp_merge(floor)
