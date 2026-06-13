@@ -45,7 +45,6 @@
   h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
-  .dev-note { color: var(--watching); font-size: 0.82rem; margin-top: 6px; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
 
   .stats { display: flex; gap: 22px; margin-top: 22px; flex-wrap: wrap; }
@@ -103,6 +102,17 @@
   .ytab.collection { color: var(--accent-soft); border-color: var(--border-strong); }
   .ytab.collection.active { background: var(--accent); color: #fff; border-color: var(--accent); }
   .yearbar-label { color: var(--text-faint); font-size: 0.78rem; margin: 40px 0 -10px; }
+
+  /* 年代別折りたたみ（視聴コレクション） */
+  .decade-block { margin-top: 56px; }
+  .decade-block:first-child { margin-top: 24px; }
+  .decade-head { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+    font-size: 2.5rem; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
+    padding-bottom: 10px; border-bottom: 2px solid var(--accent); margin-bottom: 4px; color: var(--accent-soft); }
+  .decade-head-toggle { font-size: 1.1rem; min-width: 1.2em; color: var(--text-faint); }
+  .decade-block.collapsed .decade-block-content { display: none; }
+  .decade-block.collapsed .decade-head { margin-bottom: 0; }
+  .decade-block .year-block { margin-top: 30px; }
 
   /* 年別折りたたみ */
   .year-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
@@ -227,7 +237,6 @@
       <div>
         <h1>アニメ<span class="accent">視聴備忘録</span></h1>
         <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
-        <p class="dev-note">※劇場アニメは開発中につき様々な作品が表示されてしまう可能性があります。</p>
         <p class="src-note" id="src-note"></p>
       </div>
     </div>
@@ -317,6 +326,7 @@ let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
 let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
+let collapsedDecades = new Set(); // 折りたたみ中の年代（collection モード用、キー=10年区切りの開始年）
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
 let collapsedCours = new Set();   // 折りたたみ中のクール（キー=`${year}-${season}`）
 
@@ -459,24 +469,63 @@ function renderYearbar() {
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function toggleYear(y) {
-  if (collapsedYears.has(y)) {
-    collapsedYears.delete(y);
-  } else {
-    collapsedYears.add(y);
-  }
+const decadeOf = y => Math.floor(y / 10) * 10;
+
+// 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
+function setDecadeCollapsed(d, collapsed) {
+  if (collapsed) collapsedDecades.add(d); else collapsedDecades.delete(d);
+  const block = document.getElementById(`decade-${d}`);
+  if (!block) return;
+  block.classList.toggle("collapsed", collapsed);
+  const t = block.querySelector(".decade-head-toggle");
+  if (t) t.textContent = collapsed ? "▶" : "▼";
+}
+function setYearCollapsed(y, collapsed) {
+  if (collapsed) collapsedYears.add(y); else collapsedYears.delete(y);
   const block = document.getElementById(`year-${y}`);
-  if (block) block.classList.toggle("collapsed");
-  const toggle = block.querySelector(".year-head-toggle");
-  if (toggle) toggle.textContent = collapsedYears.has(y) ? "▶" : "▼";
+  if (!block) return;
+  block.classList.toggle("collapsed", collapsed);
+  const t = block.querySelector(".year-head-toggle");
+  if (t) t.textContent = collapsed ? "▶" : "▼";
+}
+// その年のクールが全て畳まれたら年も自動で畳む → さらに年代へ伝播
+function maybeAutoFoldYear(y) {
+  const block = document.getElementById(`year-${y}`);
+  if (!block || collapsedYears.has(y)) return;
+  const cours = block.querySelectorAll(".cour");
+  if (cours.length === 0) return;
+  if (Array.from(cours).every(c => c.classList.contains("collapsed"))) {
+    setYearCollapsed(y, true);
+    maybeAutoFoldDecade(decadeOf(y));
+  }
+}
+// その年代の年が全て畳まれたら年代も自動で畳む
+function maybeAutoFoldDecade(d) {
+  const block = document.getElementById(`decade-${d}`);
+  if (!block || collapsedDecades.has(d)) return;
+  const yblocks = block.querySelectorAll(".year-block");
+  if (yblocks.length === 0) return;
+  if (Array.from(yblocks).every(b => b.classList.contains("collapsed"))) {
+    setDecadeCollapsed(d, true);
+  }
+}
+function toggleDecade(d) {
+  setDecadeCollapsed(d, !collapsedDecades.has(d));
+}
+function toggleYear(y) {
+  const collapsed = !collapsedYears.has(y);
+  setYearCollapsed(y, collapsed);
+  if (collapsed && view.mode === "collection") maybeAutoFoldDecade(decadeOf(y));
 }
 function toggleCour(key) {
   const block = document.getElementById(`cour-${key}`);
   if (!block) return;
-  if (collapsedCours.has(key)) collapsedCours.delete(key); else collapsedCours.add(key);
-  block.classList.toggle("collapsed");
+  const collapsed = !collapsedCours.has(key);
+  if (collapsed) collapsedCours.add(key); else collapsedCours.delete(key);
+  block.classList.toggle("collapsed", collapsed);
   const toggle = block.querySelector(".cour-head-toggle");
-  if (toggle) toggle.textContent = collapsedCours.has(key) ? "▶" : "▼";
+  if (toggle) toggle.textContent = collapsed ? "▶" : "▼";
+  if (collapsed && view.mode === "collection") maybeAutoFoldYear(Number(key.split("-")[0]));
 }
 function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
@@ -563,16 +612,6 @@ function render() {
     return;
   }
 
-  function countBreakdown(arr) {
-    const short = arr.filter(a => a.f === "SHORT").length;
-    const ova = arr.filter(a => a.f === "OVA").length;
-    const movie = arr.filter(a => a.f === "MOVIE").length;
-    const parts = [];
-    if (short) parts.push(`ショート${short}作品`);
-    if (ova) parts.push(`OVA${ova}作品`);
-    if (movie) parts.push(`映画${movie}作品`);
-    return parts.length ? `${arr.length}作品（内${parts.join("・")}）` : `${arr.length}作品`;
-  }
   if (!grouped) {
     const countText = countBreakdown(items);
     list.innerHTML = `<div class="year-block"><div class="year-head"><span>${view.year}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span></span></div><div class="year-block-content">${seasonGroupsHtml(items, view.year)}</div></div>`;
@@ -581,19 +620,50 @@ function render() {
     for (const a of items) (byYear[a.y] = byYear[a.y] || []).push(a);
     const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
     const isCollection = view.mode === "collection";
-    list.innerHTML = ys.map(y => {
-      const collapsed = collapsedYears.has(y);
-      const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${y}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
-      const headBtn = isCollection ? `onclick="toggleYear(${y})"` : "";
-      const yearItems = byYear[y];
-      const countText = countBreakdown(yearItems);
-      const yearLabel = `${y}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span>`;
-      return `<div class="year-block ${collapsed ? "collapsed" : ""}" id="year-${y}">
-        <div class="year-head" ${headBtn}>${toggle}<span>${yearLabel}</span></div>
-        <div class="year-block-content">${seasonGroupsHtml(yearItems, y)}</div>
-      </div>`;
-    }).join("");
+    if (isCollection) {
+      // 年を 10年ごとの「年代」枠でまとめる（折りたたみ可・自動折りたたみ対応）
+      const byDecade = {};
+      for (const y of ys) (byDecade[decadeOf(y)] = byDecade[decadeOf(y)] || []).push(y);
+      const decades = Object.keys(byDecade).map(Number).sort((a, b) => b - a);
+      list.innerHTML = decades.map(d => {
+        const collapsed = collapsedDecades.has(d);
+        const decYears = byDecade[d];
+        const decItems = decYears.flatMap(y => byYear[y]);
+        const countText = countBreakdown(decItems);
+        const label = `${d}年代 <span style="color:var(--text-faint);font-size:0.9rem;font-weight:600">${countText}</span>`;
+        return `<div class="decade-block ${collapsed ? "collapsed" : ""}" id="decade-${d}">
+          <div class="decade-head" onclick="toggleDecade(${d})">
+            <span class="decade-head-toggle">${collapsed ? "▶" : "▼"}</span><span>${label}</span>
+          </div>
+          <div class="decade-block-content">${decYears.map(y => yearBlockHtml(y, byYear[y], true)).join("")}</div>
+        </div>`;
+      }).join("");
+    } else {
+      list.innerHTML = ys.map(y => yearBlockHtml(y, byYear[y], false)).join("");
+    }
   }
+}
+
+function countBreakdown(arr) {
+  const short = arr.filter(a => a.f === "SHORT").length;
+  const ova = arr.filter(a => a.f === "OVA").length;
+  const movie = arr.filter(a => a.f === "MOVIE").length;
+  const parts = [];
+  if (short) parts.push(`ショート${short}作品`);
+  if (ova) parts.push(`OVA${ova}作品`);
+  if (movie) parts.push(`映画${movie}作品`);
+  return parts.length ? `${arr.length}作品（内${parts.join("・")}）` : `${arr.length}作品`;
+}
+function yearBlockHtml(y, yearItems, isCollection) {
+  const collapsed = collapsedYears.has(y);
+  const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${y}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
+  const headBtn = isCollection ? `onclick="toggleYear(${y})"` : "";
+  const countText = countBreakdown(yearItems);
+  const yearLabel = `${y}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span>`;
+  return `<div class="year-block ${collapsed ? "collapsed" : ""}" id="year-${y}">
+    <div class="year-head" ${headBtn}>${toggle}<span>${yearLabel}</span></div>
+    <div class="year-block-content">${seasonGroupsHtml(yearItems, y)}</div>
+  </div>`;
 }
 
 function renderRecent(list) {
