@@ -113,6 +113,15 @@
   .decade-block.collapsed .decade-block-content { display: none; }
   .decade-block.collapsed .decade-head { margin-bottom: 0; }
   .decade-block .year-block { margin-top: 30px; }
+  /* 新着: 追加日を最上位グループにする見出しバナー（中を 年代→年→クール で階層表示） */
+  .recent-date-block { margin-top: 52px; }
+  .recent-date-block:first-child { margin-top: 8px; }
+  .recent-date-block .decade-block { margin-top: 28px; }
+  .recent-date-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;
+    font-size: 1.1rem; font-weight: 800; color: var(--accent-soft);
+    background: rgba(124,92,255,.12); padding: 9px 16px; border-radius: 12px; border-left: 4px solid var(--accent); }
+  .recent-date-head .count { color: var(--text-faint); font-size: 0.82rem; font-weight: 600; }
+  .recent-date-head .line { flex: 1; }
 
   /* 年別折りたたみ */
   .year-head { display: flex; align-items: center; gap: 8px; cursor: pointer; user-select: none; }
@@ -748,15 +757,17 @@ function countBreakdown(arr) {
   if (movie) parts.push(`映画${movie}作品`);
   return parts.length ? `${arr.length}作品（内${parts.join("・")}）` : `${arr.length}作品`;
 }
-function yearBlockHtml(y, yearItems, isCollection) {
-  const collapsed = collapsedYears.has(y);
-  const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${y}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
-  const headBtn = isCollection ? `onclick="toggleYear(${y})"` : "";
+function yearBlockHtml(y, yearItems, isCollection, prefix = "") {
+  const yKey = prefix ? `${prefix}${y}` : y;
+  const yArg = prefix ? `'${yKey}'` : y;
+  const collapsed = collapsedYears.has(yKey);
+  const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${yArg}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
+  const headBtn = isCollection ? `onclick="toggleYear(${yArg})"` : "";
   const countText = countBreakdown(yearItems);
   const yearLabel = `${y}年 <span style="color:var(--text-faint);font-size:0.85rem">${countText}</span>`;
-  return `<div class="year-block ${collapsed ? "collapsed" : ""}" id="year-${y}">
+  return `<div class="year-block ${collapsed ? "collapsed" : ""}" id="year-${yKey}">
     <div class="year-head" ${headBtn}>${toggle}<span>${yearLabel}</span></div>
-    <div class="year-block-content">${seasonGroupsHtml(yearItems, y)}</div>
+    <div class="year-block-content">${seasonGroupsHtml(yearItems, y, prefix)}</div>
   </div>`;
 }
 
@@ -786,7 +797,10 @@ function renderCollectionByRating(list) {
   list.innerHTML = `<div class="year-block">${html}</div>`;
 }
 // 年代→年→クールの階層HTML（視聴コレクションと新着で共用）。折りたたみ対応。
-function decadeGroupsHtml(items) {
+// prefix: 新着では追加日（例 "2026-06-13:"）を渡し、折りたたみキー兼 id サフィックスを名前空間化する。
+// 同一年代/年/クールが複数の追加日に跨っても折りたたみ状態が衝突しないようにするため。
+// 視聴コレクション/年別ページは prefix="" で従来どおり（キーは数値のまま）。
+function decadeGroupsHtml(items, prefix = "") {
   const byYear = {};
   for (const a of items) (byYear[a.y] = byYear[a.y] || []).push(a);
   const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
@@ -794,16 +808,37 @@ function decadeGroupsHtml(items) {
   for (const y of ys) (byDecade[decadeOf(y)] = byDecade[decadeOf(y)] || []).push(y);
   const decades = Object.keys(byDecade).map(Number).sort((a, b) => b - a);
   return decades.map(d => {
-    const collapsed = collapsedDecades.has(d);
+    const dKey = prefix ? `${prefix}${d}` : d;
+    const dArg = prefix ? `'${dKey}'` : d;
+    const collapsed = collapsedDecades.has(dKey);
     const decYears = byDecade[d];
     const decItems = decYears.flatMap(y => byYear[y]);
     const countText = countBreakdown(decItems);
     const label = `${d}年代 <span style="color:var(--text-faint);font-size:0.9rem;font-weight:600">${countText}</span>`;
-    return `<div class="decade-block ${collapsed ? "collapsed" : ""}" id="decade-${d}">
-      <div class="decade-head" onclick="toggleDecade(${d})">
+    return `<div class="decade-block ${collapsed ? "collapsed" : ""}" id="decade-${dKey}">
+      <div class="decade-head" onclick="toggleDecade(${dArg})">
         <span class="decade-head-toggle">${collapsed ? "▶" : "▼"}</span><span>${label}</span>
       </div>
-      <div class="decade-block-content">${decYears.map(y => yearBlockHtml(y, byYear[y], true)).join("")}</div>
+      <div class="decade-block-content">${decYears.map(y => yearBlockHtml(y, byYear[y], true, prefix)).join("")}</div>
+    </div>`;
+  }).join("");
+}
+// 新着は「追加日（更新日）」を最上位グループにし、各追加日の中を 年代→年→クール で階層表示する。
+// 新しい追加日が上。折りたたみキーは追加日（`${date}:`）で名前空間化（同一年代/年/クールが複数日に跨るため）。
+function recentGroupsHtml(items) {
+  const byDate = {};
+  for (const a of items) (byDate[a.a] = byDate[a.a] || []).push(a);
+  const dates = Object.keys(byDate).sort().reverse();
+  return dates.map(d => {
+    const arr = byDate[d];
+    const countText = countBreakdown(arr);
+    return `<div class="recent-date-block">
+      <div class="recent-date-head">
+        <span class="season">${d} に追加</span>
+        <span class="count">${countText}</span>
+        <span class="line"></span>
+      </div>
+      ${decadeGroupsHtml(arr, `${d}:`)}
     </div>`;
   }).join("");
 }
@@ -813,9 +848,9 @@ function renderRecent(list) {
     list.innerHTML = `<div class="notice"><div class="big">🆕</div><p>新着作品がありません。</p></div>`;
     return;
   }
-  list.innerHTML = decadeGroupsHtml(items);   // 視聴コレクションと同じ 年代→年→クール 表示
+  list.innerHTML = recentGroupsHtml(items);   // 追加日（更新日）→年代→年→クールで階層表示
 }
-function seasonGroupsHtml(items, year) {
+function seasonGroupsHtml(items, year, prefix = "") {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
 
@@ -851,7 +886,7 @@ function seasonGroupsHtml(items, year) {
     if (cont.length) countText += `＋継続${cont.length}作品`;
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
     const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
-    const courKey = `${year}-${s}`;
+    const courKey = `${prefix}${year}-${s}`;
     const courCollapsed = collapsedCours.has(courKey);
     return `<section class="cour ${courCollapsed ? "collapsed" : ""}" id="cour-${courKey}">
       <div class="cour-head ${SEASON_CLS[s] || ""}" onclick="toggleCour('${courKey}')">
