@@ -859,6 +859,32 @@ window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hi
 window.addEventListener("resize", hideCtxMenu);
 
 /* ---------- ホバー情報カード ---------- */
+const WEEKDAY_JA = ["日", "月", "火", "水", "木", "金", "土"];
+// d = 公開/発売/放映開始日(YYYYMMDD整数)。月日が 0 のものは粗い粒度で表示。
+function fmtDateInt(d) {
+  if (!d) return "";
+  const y = Math.floor(d / 10000), m = Math.floor(d / 100) % 100, day = d % 100;
+  if (!m) return `${y}年`;
+  const mm = String(m).padStart(2, "0");
+  if (!day) return `${y}/${mm}`;
+  return `${y}/${mm}/${String(day).padStart(2, "0")}`;
+}
+// 情報カードの日付/時刻行。劇場=公開日 / OVA=発売日 / クール(TV・ショート)=放映日と時間。
+function airInfoRow(a) {
+  const row = (k, v) => `<div class="ic-row"><span class="ic-k">${k}</span>${v}</div>`;
+  if (a.s === "MOVIE") return a.d ? row("公開日", fmtDateInt(a.d)) : "";
+  if (a.s === "OVA") return a.d ? row("発売日", fmtDateInt(a.d)) : "";
+  // クール作品: air(放送1話分のairingAt, unix秒UTC) があれば曜日・時刻まで表示。
+  // JST固定表示にするため +9h して getUTC* で取り出す（閲覧者TZ非依存）。実時刻のまま表示。
+  if (a.air) {
+    const j = new Date(a.air * 1000 + 9 * 3600 * 1000);
+    const date = `${j.getUTCFullYear()}/${String(j.getUTCMonth() + 1).padStart(2, "0")}/${String(j.getUTCDate()).padStart(2, "0")}`;
+    const time = `${String(j.getUTCHours()).padStart(2, "0")}:${String(j.getUTCMinutes()).padStart(2, "0")}`;
+    return row("放映", `${date}（${WEEKDAY_JA[j.getUTCDay()]}）${time}〜`);
+  }
+  if (a.d) return row("放映", `${fmtDateInt(a.d)} 放送開始`);
+  return "";
+}
 function showInfo(e, id) {
   const a = catalog.find(x => x.id === id);
   if (!a) return;
@@ -870,6 +896,7 @@ function showInfo(e, id) {
     const cv = c[1] ? ` <span class="ic-cv">${esc(c[1])}</span>` : "";
     return `<div class="ic-char">${esc(c[0])}${cv}${more}</div>`;
   }).join("");
+  const airRow = airInfoRow(a);
   const myR = ratingOf(a.id), wSt = statusOf(a.id), wEp = epOf(a.id);
   const myRow = myR ? `<div class="ic-row"><span class="ic-k">自分評価</span><span style="color:#fcd34d">${"★".repeat(myR)}</span><span style="color:var(--text-faint)">${"★".repeat(5 - myR)}</span></div>` : "";
   const wRow = wSt === "watching" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中${wEp ? `（${wEp}話まで）` : ""}</div>`
@@ -878,6 +905,7 @@ function showInfo(e, id) {
     `<div class="ic-title">${esc(a.t)}</div>` +
     (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}</div>` : "") +
     (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(a.st)}</div>` : "") +
+    airRow +
     myRow + wRow +
     (chars ? `<div class="ic-chars">${chars}</div>` : "");
   card.classList.add("show");

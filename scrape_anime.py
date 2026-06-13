@@ -209,6 +209,8 @@ query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
       averageScore
       genres
       coverImage { medium }
+      startDate { year month day }
+      airingSchedule(perPage: 1) { nodes { airingAt episode } }
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
@@ -428,6 +430,16 @@ def release_date_int(m):
     return y * 10000 + (sd.get("month") or 0) * 100 + (sd.get("day") or 0)
 
 
+def airing_at(m):
+    """放映時刻(曜日・時刻)の取得用に、airingSchedule の1話分の airingAt(unix秒UTC)を返す。
+    放送枠は毎週同じなので任意の1話で曜日・時刻が決まる。無ければ None。"""
+    nodes = ((m.get("airingSchedule") or {}).get("nodes")) or []
+    for n in nodes:
+        if n.get("airingAt"):
+            return n["airingAt"]
+    return None
+
+
 def make_record(m, year, season, force_fmt=None):
     """AniList の media 1件を出力レコードに変換。
     MOVIE/OVA は公開年(startDate)でカテゴライズし s=フォーマット名。"""
@@ -478,16 +490,23 @@ def enrich_record(rec, m):
     else:
         rec.pop("os", None)
     rec["ch"] = char_pairs(m) or []
-    # OVA/劇場は年別カテゴライズのため、年内ソート用に発売/公開日(d=YYYYMMDD)を持たせる。
-    # TV/ショートはクール表示なので不要（付けない）。
-    if rec.get("s") in YEARLY_FORMATS:
-        d = release_date_int(m)
-        if d:
-            rec["d"] = d
-        else:
-            rec.pop("d", None)
+    # 公開/発売/放映開始日(d=YYYYMMDD)を全フォーマットに持たせる。
+    # OVA/劇場の年内ソートと、ホバー情報カードの日付表示に使う。
+    d = release_date_int(m)
+    if d:
+        rec["d"] = d
     else:
         rec.pop("d", None)
+    # TV/ショートは放映日時(air=1話分のairingAt, unix秒UTC=曜日と時刻)を持たせる。
+    # OVA/劇場は公開/発売「日」のみで時刻は不要。
+    if rec.get("s") not in YEARLY_FORMATS:
+        air = airing_at(m)
+        if air:
+            rec["air"] = air
+        else:
+            rec.pop("air", None)
+    else:
+        rec.pop("air", None)
 
 
 # 同一年内の表示順: クール（冬春夏秋）→ OVA → 劇場
@@ -714,6 +733,7 @@ query ($ids: [Int]) {
     media(id_in: $ids) {
       id
       startDate { year month day }
+      airingSchedule(perPage: 1) { nodes { airingAt episode } }
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
@@ -987,9 +1007,9 @@ def main():
         force = "--force" in args
         run_enrich(force=force)
     elif args and args[0] == "--dates":
-        # OVA/劇場の年内ソート用に発売/公開日(d)をバックフィル。
+        # 公開/発売/放映日(d)・放映時刻(air)をバックフィル（全フォーマット）。
         force = "--force" in args
-        run_enrich(predicate=lambda a: a.get("s") in YEARLY_FORMATS and (force or "d" not in a))
+        run_enrich(predicate=lambda a: force or "d" not in a)
     elif args and args[0] == "--narou":
         run_narou(force="--force" in args)
     elif args and args[0] == "--ona-jp":
