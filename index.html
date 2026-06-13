@@ -21,6 +21,7 @@
     --watching: #fbbf24;
     --maybe: #38bdf8;
     --dropped: #f87171;
+    --planning: #f472b6;
     --radius: 12px;
     --radius-sm: 8px;
     --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;
@@ -55,6 +56,7 @@
   .stat.watching .num { color: var(--watching); }
   .stat.maybe .num { color: var(--maybe); }
   .stat.dropped .num { color: var(--dropped); }
+  .stat.planning .num { color: var(--planning); }
   .collection-bar { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   body.hide-scores .poster .score { display: none; }
 
@@ -82,6 +84,7 @@
   .chip.watching.active { background: var(--watching); border-color: var(--watching); color: #3a2c05; box-shadow: 0 4px 14px -4px rgba(251,191,36,.4); }
   .chip.maybe.active { background: var(--maybe); border-color: var(--maybe); color: #07263b; box-shadow: 0 4px 14px -4px rgba(56,189,248,.4); }
   .chip.dropped.active { background: var(--dropped); border-color: var(--dropped); color: #2a0a0a; box-shadow: 0 4px 14px -4px rgba(248,113,113,.4); }
+  .chip.planning.active { background: var(--planning); border-color: var(--planning); color: #3a0a25; box-shadow: 0 4px 14px -4px rgba(244,114,182,.4); }
 
   /* Year nav */
   .yearbar {
@@ -163,6 +166,8 @@
   .poster .status .qmark { font-weight: 800; font-size: 15px; line-height: 1; }
   .poster.dropped { border-color: var(--dropped); }
   .poster.dropped .status { display: grid; background: var(--dropped); color: #2a0a0a; }
+  .poster.planning { border-color: var(--planning); }
+  .poster.planning .status { display: grid; background: var(--planning); color: #3a0a25; }
   .poster .status .xmark { font-weight: 800; font-size: 17px; line-height: 1; }
   .poster .prog { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: rgba(251,191,36,.22); color: var(--watching); }
   .poster .prog.dropped { background: rgba(248,113,113,.2); color: var(--dropped); }
@@ -244,6 +249,7 @@
       <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
       <button class="chip done" data-f="done" onclick="setFilter('done')">視聴済</button>
       <button class="chip watching" data-f="watching" onclick="setFilter('watching')">視聴中</button>
+      <button class="chip planning" data-f="planning" onclick="setFilter('planning')">視聴予定</button>
       <button class="chip dropped" data-f="dropped" onclick="setFilter('dropped')">視聴中止</button>
       <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
       <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
@@ -295,12 +301,12 @@ const CURRENT_YEAR = new Date().getFullYear();
 function seasonOrder(year) { return year === CURRENT_YEAR ? SEASON_ORDER : SEASON_ORDER_DISPLAY; }
 // 左クリックは「視聴済→多分視聴済→未マーク」の3状態のみを巡回（視聴中/視聴中止は右クリックから設定）。
 const LEFT_NEXT = { unwatched: "done", done: "maybe", maybe: "unwatched" };
-const STATUS_JA = { done: "視聴済", watching: "視聴中", dropped: "視聴中止", maybe: "多分視聴済", unwatched: "未マーク" };
+const STATUS_JA = { done: "視聴済", watching: "視聴中", planning: "視聴予定", dropped: "視聴中止", maybe: "多分視聴済", unwatched: "未マーク" };
 // 右クリックメニューで選べる全状態（表示順）
-const CTX_STATES = [["unwatched", "未マーク"], ["watching", "視聴中"], ["done", "視聴済"], ["dropped", "視聴中止"], ["maybe", "多分視聴済"]];
+const CTX_STATES = [["unwatched", "未マーク"], ["planning", "視聴予定"], ["watching", "視聴中"], ["done", "視聴済"], ["dropped", "視聴中止"], ["maybe", "多分視聴済"]];
 const FMT_JA = { TV: "TV", SHORT: "ショート", OVA: "OVA", MOVIE: "劇場アニメ" };
 // 複数選択フィルタの対象キー（「すべて」= 全キー選択状態）
-const STATUS_KEYS = ["done", "watching", "maybe", "dropped", "unwatched"];
+const STATUS_KEYS = ["done", "watching", "planning", "maybe", "dropped", "unwatched"];
 const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 
 let catalog = [];
@@ -513,11 +519,12 @@ function passStatus(a) {
 
 /* ---------- stats ---------- */
 function renderStats() {
-  let done = 0, watching = 0, maybe = 0, dropped = 0;
-  for (const id in watch) { const v = (watch[id] || {}).s; if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; else if (v === "dropped") dropped++; }
+  let done = 0, watching = 0, maybe = 0, dropped = 0, planning = 0;
+  for (const id in watch) { const v = (watch[id] || {}).s; if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; else if (v === "dropped") dropped++; else if (v === "planning") planning++; }
   document.getElementById("stats").innerHTML = `
     <div class="stat done"><span class="num">${done}</span><span class="lbl">視聴済</span></div>
     <div class="stat watching"><span class="num">${watching}</span><span class="lbl">視聴中</span></div>
+    <div class="stat planning"><span class="num">${planning}</span><span class="lbl">視聴予定</span></div>
     <div class="stat dropped"><span class="num">${dropped}</span><span class="lbl">視聴中止</span></div>
     <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>
     <div class="stat"><span class="num">${catalog.length.toLocaleString()}</span><span class="lbl">カタログ作品</span></div>`;
@@ -645,6 +652,7 @@ function statusIcon(st) {
   if (st === "done") return '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/></svg>';
   if (st === "maybe") return '<span class="qmark">?</span>';
   if (st === "dropped") return '<span class="xmark">×</span>';
+  if (st === "planning") return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 011 1v19l-7-4.2L5 22V3a1 1 0 011-1z"/></svg>';
   return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 }
 function posterHtml(a) {
@@ -684,8 +692,15 @@ function posterHtml(a) {
 /* ---------- marking ---------- */
 function cycle(id) {
   const cur = statusOf(id);
-  const next = LEFT_NEXT[cur] || "done";   // 視聴中/視聴中止からは視聴済へ
-  setStatus(id, next, null);
+  let next;
+  if (cur === "watching" || cur === "dropped") {
+    // 話数を入れた視聴中/視聴中止は、誤クリックでも話数を失わないよう両者のトグルだけにする。
+    next = cur === "watching" ? "dropped" : "watching";
+    setStatus(id, next, epOf(id));
+  } else {
+    next = LEFT_NEXT[cur] || "done";   // 未マーク/視聴済/多分視聴済/視聴予定 → 3状態巡回
+    setStatus(id, next, null);
+  }
   renderStats();
   // 視聴コレクション表示中も、未視聴に戻した作品はその場では消さずポスターのみ更新（誤クリック対策）。
   // 次回のページ偏移（年タブ/コレクション/検索など）で再描画され、自然に除外される。
@@ -695,7 +710,7 @@ function cycle(id) {
 /* ---------- 右クリックメニュー ---------- */
 let ctxOpenedAt = 0;
 let ctxPos = { x: 0, y: 0 };
-const STAT_ICON = { unwatched: "·", watching: "▶", done: "✓", dropped: "×", maybe: "?" };
+const STAT_ICON = { unwatched: "·", planning: "🔖", watching: "▶", done: "✓", dropped: "×", maybe: "?" };
 function ctxInner(a) {
   const id = a.id;
   const cur = statusOf(id), r = ratingOf(id), ep = epOf(id);
@@ -1026,9 +1041,9 @@ function exportImage(date) {
     yy += yearHeadH;
     for (const a of byYear[y]) {
       const st = statusOf(a.id);
-      ctx.fillStyle = st === "done" ? "#34d399" : st === "maybe" ? "#38bdf8" : st === "dropped" ? "#f87171" : "#fbbf24";
+      ctx.fillStyle = st === "done" ? "#34d399" : st === "maybe" ? "#38bdf8" : st === "dropped" ? "#f87171" : st === "planning" ? "#f472b6" : "#fbbf24";
       ctx.font = `700 15px ${JP}`;
-      ctx.fillText(st === "done" ? "✓" : st === "maybe" ? "?" : st === "dropped" ? "×" : "▶", pad, yy + 16);
+      ctx.fillText(st === "done" ? "✓" : st === "maybe" ? "?" : st === "dropped" ? "×" : st === "planning" ? "▷" : "▶", pad, yy + 16);
       ctx.fillStyle = "#e8eaef"; ctx.font = `400 16px ${JP}`;
       let title = a.t;
       const maxW = W - pad * 2 - 90;
