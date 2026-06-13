@@ -177,6 +177,16 @@ def official_site_url(m):
     return None
 
 
+def amazon_video_url(m):
+    """External & Streaming Links の Amazon プライム・ビデオ(type STREAMING)の URL を返す（無ければ None）。
+    右クリックメニューの「プライム・ビデオで開く」用。AniList では site="Amazon Prime Video"。
+    リージョンにより amazon.com / amazon.co.jp が混在するが、登録 URL をそのまま使う。"""
+    for l in (m.get("externalLinks") or []):
+        if l.get("type") == "STREAMING" and "prime video" in (l.get("site") or "").strip().lower():
+            return l.get("url") or None
+    return None
+
+
 def char_pairs(m):
     """メインキャラ（最大5）を [キャラ名, 日本語CV名] の配列で返す。
     UIは先頭4件を表示し、5件目があれば「…」で続きを示す。CV未登録は名前のみ。"""
@@ -490,6 +500,11 @@ def enrich_record(rec, m):
         rec["os"] = os_url
     else:
         rec.pop("os", None)
+    pv_url = amazon_video_url(m)
+    if pv_url:
+        rec["pv"] = pv_url
+    else:
+        rec.pop("pv", None)
     rec["ch"] = char_pairs(m) or []
     # 公開/発売/放映開始日(d=YYYYMMDD)を全フォーマットに持たせる。
     # OVA/劇場の年内ソートと、ホバー情報カードの日付表示に使う。
@@ -780,6 +795,44 @@ def run_enrich(force=False, batch=20, predicate=None):
         time.sleep(1.0)
     write_catalog(anime)
     print(f"\n完了: {done} 件をエンリッチしました（{OUT_PATH} 更新済み）。", flush=True)
+
+
+def run_prime_backfill(force=False, batch=25):
+    """既存 anime-data.js の各作品に Amazon プライム・ビデオの URL(pv) を後付けする。
+    他フィールドは触らず pv のみ set/pop して差分を最小化する。既定では pv 未設定の作品
+    だけを対象に id_in でバッチ取得（中断後の再実行で続きから）。force=True で全件再取得。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime if force or "pv" not in a]
+    print(f"プライム・ビデオ取得対象: {len(todo)} / 全 {len(anime)} 件 (batch={batch})", flush=True)
+    done = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(ENRICH_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    GraphQL error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        for m in data["data"]["Page"]["media"]:
+            a = by_id.get(m["id"])
+            if a is None:
+                continue
+            pv_url = amazon_video_url(m)
+            if pv_url:
+                a["pv"] = pv_url
+            else:
+                a.pop("pv", None)
+        done += len(ids)
+        step = i // batch
+        if step % 20 == 0:
+            print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        if step and step % 50 == 0:
+            write_catalog(anime)  # 定期チェックポイント（中断対策）
+        time.sleep(1.0)
+    write_catalog(anime)
+    pv_total = sum(1 for a in anime if a.get("pv"))
+    print(f"\n完了: {done} 件処理 / pv付き {pv_total} 件（{OUT_PATH} 更新済み）。", flush=True)
 
 
 # ---------- MAL放送枠(Jikan)で古い作品の放映曜日・時刻を補完 ----------
@@ -1085,6 +1138,9 @@ def main():
         # 公開/発売/放映日(d)・放映時刻(air)をバックフィル（全フォーマット）。
         force = "--force" in args
         run_enrich(predicate=lambda a: force or "d" not in a)
+    elif args and args[0] == "--prime":
+        # Amazon プライム・ビデオの URL(pv) をバックフィル（pv のみ更新）。
+        run_prime_backfill(force="--force" in args)
     elif args and args[0] == "--broadcast":
         # air が無い旧クール作品に MAL(Jikan) の放送曜日・時刻(bc) を補完。
         run_broadcast()

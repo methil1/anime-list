@@ -809,6 +809,7 @@ function ctxInner(a) {
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
     ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
+    ${a.pv ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>` : ""}
     <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>`;
 }
 function positionCtx() {
@@ -981,6 +982,11 @@ function openOfficial(id) {
   hideCtxMenu();
   const a = catalog.find(x => x.id === id);
   if (a && a.os) window.open(a.os, "_blank", "noopener");
+}
+function openPrime(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (a && a.pv) window.open(a.pv, "_blank", "noopener");
 }
 function updatePoster(id) {
   const a = catalog.find(x => x.id === id);
