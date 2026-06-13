@@ -107,6 +107,7 @@ EXCLUDE_IDS = {
     10149,   # 魔法阿媽 (台湾制作・countryOfOrigin=TWでCNフィルタ外)
     103456,  # 穴 -the ten hole stories-
     145442,  # BIBLIOMANIA
+    190574,  # ひな菊の人生 (Hinagiku no Jinsei・2026劇場版)
 }
 
 
