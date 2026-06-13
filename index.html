@@ -162,6 +162,7 @@
   .poster .sub { font-size: 0.68rem; color: var(--text-dim); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .poster .ep { font-variant-numeric: tabular-nums; }
   .poster .multi { background: var(--accent); color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
+  .poster .cont { background: var(--watching); color: #3a2c05; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
   .poster .fmt { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
   .poster .fmt.short { background: #0e7490; color: #cffafe; }
   .poster .fmt.ova { background: #0f766e; color: #ccfbf1; }
@@ -183,6 +184,7 @@
   .poster .prog.dropped { background: rgba(248,113,113,.2); color: var(--dropped); }
   .poster .myrate { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: rgba(124,92,255,.25); color: var(--accent-soft); }
   .poster .score { position: absolute; top: 7px; left: 7px; background: rgba(8,9,12,.78); color: #fcd34d; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+  .poster .score.noscore { color: var(--text-faint); }
 
   /* empty / loading */
   .notice { text-align: center; padding: 80px 20px; color: var(--text-faint); }
@@ -224,6 +226,7 @@
   .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
   .info-card .ic-k { flex: 0 0 auto; color: var(--text-faint); }
   .info-card .ic-narou { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
+  .info-card .ic-kakuyomu { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-chars { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); display: grid; gap: 3px; }
   .info-card .ic-char { font-size: 0.81rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info-card .ic-cv { color: var(--accent-soft); }
@@ -245,6 +248,7 @@
 
   <div class="collection-bar">
     <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
+    <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 評価順</button>
     <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着</button>
     <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
   </div>
@@ -252,7 +256,7 @@
   <div class="toolbar">
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="search" placeholder="作品名で検索（全年代）..." oninput="onSearch()">
+      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索（全年代）..." oninput="onSearch()">
     </div>
     <div class="chips" id="filters">
       <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
@@ -321,7 +325,8 @@ const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 let catalog = [];
 let years = [];
 let watch = loadWatch();
-let view = { mode: "year", year: null };   // mode: "year" | "collection"
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent"
+let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
 let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
@@ -397,6 +402,45 @@ function courLabel(ep) {
   if (ep > 13) return { multi: true, text: ep > 52 ? "長期" : "連続" + Math.max(2, Math.round(ep / 13)) + "クール" };
   return null;
 }
+// クールの暦順。現クール（今放送中のクール）は今日の月から算出する。
+const SEASON_CAL = ["WINTER", "SPRING", "SUMMER", "FALL"];
+function currentCour() {
+  const now = new Date();
+  return { year: now.getFullYear(), season: SEASON_CAL[Math.floor(now.getMonth() / 3)] };
+}
+// 放送開始の時系列キー（古い順ソート用）。放映日(d, YYYYMMDD)優先、無ければ年＋クール頭月で代用。
+const SEASON_MONTH = { WINTER: 1, SPRING: 4, SUMMER: 7, FALL: 10, OVA: 1, MOVIE: 1 };
+function chronoKey(a) {
+  if (a.d) return a.d;
+  return a.y * 10000 + (SEASON_MONTH[a.s] || 1) * 100 + 1;
+}
+// 放送話数からクール数を推定（courLabel と同じ基準）。0=不明 / 99=長期(>52話)。
+function courCount(ep) {
+  if (!ep) return 0;
+  if (ep > 52) return 99;
+  if (ep > 13) return Math.max(2, Math.round(ep / 13));
+  return 1;
+}
+// 現クール cc に「継続放送中」として複製表示すべき作品（開始クールは別）を返す。
+// 対象: TV/ショートのクール作品で 2〜3クール（1クールは継続なし／4クール以上=長期は除外）、
+// かつ放送期間が cc を含み、かつ開始クールが cc 自身ではない（開始クールには既に表示済み）。
+function continuingInCour(cc) {
+  return catalog.filter(a => {
+    if (a.f !== "TV" && a.f !== "SHORT") return false;
+    if (!SEASON_CAL.includes(a.s)) return false;
+    const k = courCount(a.ep);
+    if (k < 2 || k >= 4) return false;
+    if (!passStatus(a)) return false;
+    let yi = a.y, si = SEASON_CAL.indexOf(a.s);
+    for (let n = 0; n < k; n++) {
+      if (yi === cc.year && SEASON_CAL[si] === cc.season) {
+        return !(a.y === cc.year && a.s === cc.season);
+      }
+      si++; if (si > 3) { si = 0; yi++; }
+    }
+    return false;
+  });
+}
 function toast(msg) {
   const t = document.getElementById("toast");
   t.textContent = msg; t.classList.add("show");
@@ -463,12 +507,15 @@ function renderYearbar() {
   const bottom = document.getElementById("yearbar-bottom");
   if (bottom) bottom.innerHTML = html;
   const cb = document.getElementById("collection-btn");
-  if (cb) cb.classList.toggle("active", view.mode === "collection");
+  if (cb) cb.classList.toggle("active", view.mode === "collection" && collectionSort === "season");
+  const ratb = document.getElementById("rating-btn");
+  if (ratb) ratb.classList.toggle("active", view.mode === "collection" && collectionSort === "rating");
   const rb = document.getElementById("recent-btn");
   if (rb) rb.classList.toggle("active", view.mode === "recent");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function goCollection() { view = { mode: "collection", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goRatingSort() { view = { mode: "collection", year: null }; collectionSort = "rating"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 const decadeOf = y => Math.floor(y / 10) * 10;
 
 // 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
@@ -558,7 +605,70 @@ function setFormat(f) {
   syncChips("formatfilters", "ff", formatFilter, FORMAT_KEYS);
   render();
 }
-function onSearch() { query = document.getElementById("search").value.trim().toLowerCase(); render(); }
+// 制作会社の英語/ローマ字名 → 日本語名。AniList はスタジオ名を英語で格納するため、
+// 表示と検索を日本語対応させる。未登録のスタジオは英語表示のまま（英語名検索は引き続き可能）。
+const STUDIO_JA = {
+  "Toei Animation": "東映アニメーション", "Sunrise": "サンライズ", "J.C.STAFF": "ジェー・シー・スタッフ",
+  "MADHOUSE": "マッドハウス", "Studio DEEN": "スタジオディーン", "Production I.G": "プロダクション・アイジー",
+  "TMS Entertainment": "トムス・エンタテインメント", "Studio Pierrot": "ぴえろ", "OLM": "オー・エル・エム",
+  "A-1 Pictures": "エー・ワン・ピクチャーズ", "Nippon Animation": "日本アニメーション",
+  "AIC": "アニメインターナショナルカンパニー", "Tatsunoko Production": "タツノコプロ",
+  "Shin-Ei Animation": "シンエイ動画", "bones": "ボンズ", "GONZO": "ゴンゾ", "Xebec": "ジーベック",
+  "SILVER LINK.": "シルバーリンク", "Tokyo Movie Shinsha": "東京ムービー新社", "LIDENFILMS": "ライデンフィルム",
+  "Kyoto Animation": "京都アニメーション", "Shaft": "シャフト", "Group TAC": "グループ・タック",
+  "Brain's Base": "ブレインズ・ベース", "Satelight": "サテライト", "Doga Kobo": "動画工房",
+  "Ashi Productions": "葦プロダクション", "MAPPA": "マッパ", "Tezuka Productions": "手塚プロダクション",
+  "WIT STUDIO": "ウィットスタジオ", "feel.": "フィール", "Studio Comet": "スタジオコメット",
+  "Magic Bus": "マジックバス", "Ajiado": "亜細亜堂", "Bandai Namco Pictures": "バンダイナムコピクチャーズ",
+  "Lerche": "ラルケ", "Kinema Citrus": "キネマシトラス", "ZEXCS": "ゼクシズ", "CloverWorks": "クローバーワークス",
+  "Fanworks": "ファンワークス", "Studio Gallop": "スタジオぎゃろっぷ", "P.A.WORKS": "ピーエーワークス",
+  "diomedéa": "ディオメディア", "Actas": "アクタス", "Sanrio": "サンリオ", "8-bit": "エイトビット",
+  "ufotable": "ユーフォーテーブル", "Seven Arcs": "セブン・アークス", "Telecom Animation Film": "テレコム・アニメーションフィルム",
+  "Studio Gokumi": "スタジオ五組", "david production": "デイヴィッドプロダクション", "Gainax": "ガイナックス",
+  "project No.9": "プロジェクトNo.9", "SANZIGEN": "サンジゲン", "Asahi Production": "旭プロダクション",
+  "Animate Film": "アニメイトフィルム", "Zero-G": "ゼロジー", "Studio Hibari": "スタジオひばり", "ARMS": "アームス",
+  "WHITE FOX": "ホワイトフォックス", "POLYGON PICTURES": "ポリゴン・ピクチュアズ", "Studio 4°C": "スタジオ4℃",
+  "Artland": "アートランド", "CoMix Wave": "コミックス・ウェーブ・フィルム", "Yumeta Company": "ゆめ太カンパニー",
+  "Hal Film Maker": "ハルフィルムメーカー", "Bee Train": "ビィートレイン", "Signal.MD": "シグナル・エムディー",
+  "GoHands": "ゴーハンズ", "TV Asahi": "テレビ朝日", "Passione": "パッショーネ", "Nomad": "ノーマッド",
+  "Triangle Staff": "トライアングルスタッフ", "Studio Ghibli": "スタジオジブリ", "TV Tokyo": "テレビ東京",
+  "Mushi Production": "虫プロダクション", "Radix": "ラディクス", "Knack Productions": "ナック",
+  "Manglobe": "マングローブ", "TRIGGER": "トリガー", "Bridge": "ブリッジ", "Shirogumi": "白組",
+  "Hoods Entertainment": "フッズエンタテインメント", "Studio Fantasia": "スタジオファンタジア", "TROYCA": "トロイカ",
+  "Studio KAI": "スタジオKAI", "Graphinica": "グラフィニカ", "Science SARU": "サイエンスSARU", "NHK": "NHK",
+  "Production IMS": "プロダクションアイムズ", "Bandai Visual": "バンダイビジュアル", "Lay-duce": "レイデュース",
+  "Eiken": "エイケン", "Felix Film": "フェリックスフィルム", "Orange": "オレンジ",
+  "Studio Signpost": "スタジオサインポスト", "Robot": "ロボット", "Maho Film": "マホ・フィルム", "CONNECT": "コネクト",
+  "WAO World": "ワオワールド", "Shuka": "朱夏", "Bibury Animation Studios": "バイブリーアニメーションスタジオ",
+  "PINE JAM": "パインジャム", "CygamesPictures": "サイゲームスピクチャーズ", "Encourage Films": "エンカレッジフィルムズ",
+};
+function studioJa(name) { return STUDIO_JA[name] || name; }
+// 「A・B」形式（複数社連結）の各社を日本語化して返す（表示用）。未登録は英語のまま。
+function studioDisplay(st) { return st ? st.split("・").map(studioJa).join("・") : st; }
+
+// カタカナ⇄ひらがなと全角/半角の表記ゆれを吸収する検索用正規化。
+function kanaFold(s) {
+  if (!s) return "";
+  s = s.normalize("NFKC").toLowerCase();   // 半角カナ→全角カナ・全角英数→半角 等
+  let out = "";
+  for (const ch of s) {
+    const c = ch.codePointAt(0);
+    out += (c >= 0x30A1 && c <= 0x30F6)    // カタカナ → ひらがな（長音ーは対象外で保持）
+      ? String.fromCodePoint(c - 0x60) : ch;
+  }
+  return out;
+}
+
+// タイトル/ローマ字/制作会社/原作者/声優・キャラ名を1つの折りたたみ済み文字列に（遅延キャッシュ）。
+function searchKey(a) {
+  if (a._sk !== undefined) return a._sk;
+  const parts = [a.t, a.tr, a.st, studioDisplay(a.st), a.au];
+  if (a.ch) for (const p of a.ch) { parts.push(p[0]); if (p[1]) parts.push(p[1]); }
+  a._sk = kanaFold(parts.filter(Boolean).join(" "));
+  return a._sk;
+}
+
+function onSearch() { query = kanaFold(document.getElementById("search").value.trim()); render(); }
 
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
@@ -585,13 +695,13 @@ function render() {
   const list = document.getElementById("list");
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
+  if (view.mode === "collection" && collectionSort === "rating" && !query) { renderCollectionByRating(list); return; }
 
   let items;
   let grouped = true; // year+season grouping vs single year
 
   if (query) {
-    items = catalog.filter(a => passStatus(a) &&
-      ((a.t && a.t.toLowerCase().includes(query)) || (a.tr && a.tr.toLowerCase().includes(query))));
+    items = catalog.filter(a => passStatus(a) && searchKey(a).includes(query));
   } else if (view.mode === "collection") {
     items = catalog.filter(a => statusOf(a.id) !== "unwatched" && passStatus(a));
   } else {
@@ -621,23 +731,7 @@ function render() {
     const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
     const isCollection = view.mode === "collection";
     if (isCollection) {
-      // 年を 10年ごとの「年代」枠でまとめる（折りたたみ可・自動折りたたみ対応）
-      const byDecade = {};
-      for (const y of ys) (byDecade[decadeOf(y)] = byDecade[decadeOf(y)] || []).push(y);
-      const decades = Object.keys(byDecade).map(Number).sort((a, b) => b - a);
-      list.innerHTML = decades.map(d => {
-        const collapsed = collapsedDecades.has(d);
-        const decYears = byDecade[d];
-        const decItems = decYears.flatMap(y => byYear[y]);
-        const countText = countBreakdown(decItems);
-        const label = `${d}年代 <span style="color:var(--text-faint);font-size:0.9rem;font-weight:600">${countText}</span>`;
-        return `<div class="decade-block ${collapsed ? "collapsed" : ""}" id="decade-${d}">
-          <div class="decade-head" onclick="toggleDecade(${d})">
-            <span class="decade-head-toggle">${collapsed ? "▶" : "▼"}</span><span>${label}</span>
-          </div>
-          <div class="decade-block-content">${decYears.map(y => yearBlockHtml(y, byYear[y], true)).join("")}</div>
-        </div>`;
-      }).join("");
+      list.innerHTML = decadeGroupsHtml(items);   // 年代→年→クールで階層表示（折りたたみ可）
     } else {
       list.innerHTML = ys.map(y => yearBlockHtml(y, byYear[y], false)).join("");
     }
@@ -666,35 +760,76 @@ function yearBlockHtml(y, yearItems, isCollection) {
   </div>`;
 }
 
+// 視聴コレクション「評価順」: 自己評価(1-5)を付けた作品を ★5→★1 の順に並べ、
+// 各評価内では放送が古い順（クール別には分けない）。
+function renderCollectionByRating(list) {
+  const items = catalog.filter(a => ratingOf(a.id) > 0 && passStatus(a));
+  if (items.length === 0) {
+    list.innerHTML = `<div class="notice"><div class="big">★</div><p>1〜5点の評価を付けた作品がまだありません。ポスターを右クリックして評価を設定できます。</p></div>`;
+    return;
+  }
+  const byRating = {};
+  for (const a of items) (byRating[ratingOf(a.id)] = byRating[ratingOf(a.id)] || []).push(a);
+  const html = [5, 4, 3, 2, 1].filter(r => byRating[r]).map(r => {
+    const arr = byRating[r].slice().sort((a, b) => chronoKey(a) - chronoKey(b));
+    const shortCount = arr.filter(a => a.f === "SHORT").length;
+    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
+    return `<section class="cour">
+      <div class="cour-head s-recent">
+        <span class="season">自己評価 ${"★".repeat(r)}（${r}点）</span>
+        <span class="count">${countText}</span>
+        <span class="line"></span>
+      </div>
+      <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
+    </section>`;
+  }).join("");
+  list.innerHTML = `<div class="year-block">${html}</div>`;
+}
+// 年代→年→クールの階層HTML（視聴コレクションと新着で共用）。折りたたみ対応。
+function decadeGroupsHtml(items) {
+  const byYear = {};
+  for (const a of items) (byYear[a.y] = byYear[a.y] || []).push(a);
+  const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
+  const byDecade = {};
+  for (const y of ys) (byDecade[decadeOf(y)] = byDecade[decadeOf(y)] || []).push(y);
+  const decades = Object.keys(byDecade).map(Number).sort((a, b) => b - a);
+  return decades.map(d => {
+    const collapsed = collapsedDecades.has(d);
+    const decYears = byDecade[d];
+    const decItems = decYears.flatMap(y => byYear[y]);
+    const countText = countBreakdown(decItems);
+    const label = `${d}年代 <span style="color:var(--text-faint);font-size:0.9rem;font-weight:600">${countText}</span>`;
+    return `<div class="decade-block ${collapsed ? "collapsed" : ""}" id="decade-${d}">
+      <div class="decade-head" onclick="toggleDecade(${d})">
+        <span class="decade-head-toggle">${collapsed ? "▶" : "▼"}</span><span>${label}</span>
+      </div>
+      <div class="decade-block-content">${decYears.map(y => yearBlockHtml(y, byYear[y], true)).join("")}</div>
+    </div>`;
+  }).join("");
+}
 function renderRecent(list) {
   const items = catalog.filter(a => a.a && passStatus(a));
   if (items.length === 0) {
     list.innerHTML = `<div class="notice"><div class="big">🆕</div><p>新着作品がありません。</p></div>`;
     return;
   }
-  list.innerHTML = `<div class="year-block">${recentGroupsHtml(items)}</div>`;
-}
-function recentGroupsHtml(items) {
-  const byDate = {};
-  for (const a of items) (byDate[a.a] = byDate[a.a] || []).push(a);
-  const dates = Object.keys(byDate).sort().reverse();
-  return dates.map(d => {
-    const arr = byDate[d].slice().sort((x, y) => (y.y - x.y) || ((y.sc || 0) - (x.sc || 0)));
-    const shortCount = arr.filter(a => a.f === "SHORT").length;
-    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
-    return `<section class="cour">
-      <div class="cour-head s-recent">
-        <span class="season">${d} に追加</span>
-        <span class="count">${countText}</span>
-        <span class="line"></span>
-      </div>
-      <div class="grid">${arr.map(posterHtml).join("")}</div>
-    </section>`;
-  }).join("");
+  list.innerHTML = decadeGroupsHtml(items);   // 視聴コレクションと同じ 年代→年→クール 表示
 }
 function seasonGroupsHtml(items, year) {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
+
+  // 現クール（今放送中のクール）に、別クール開始で継続放送中の非長期作品を複製表示する。
+  // 年別ページのみ・検索/コレクション以外・現クールの年を表示しているときだけ対象。
+  const cc = currentCour();
+  let continuing = [];
+  if (view.mode === "year" && !query && year === cc.year) {
+    continuing = continuingInCour(cc);
+    // 現クールに新規開始作品が無くても、継続作品があればクール枠を作る。
+    if (continuing.length && !bySeason[cc.season]) bySeason[cc.season] = [];
+  }
+  const continuingIds = new Set(continuing.map(a => a.id));
+
   // 視聴コレクションは現行年も含め全年を逆順（秋→冬）。年別ページのみ現行年は暦順を維持。
   const order = view.mode === "collection" ? SEASON_ORDER_DISPLAY : seasonOrder(year);
   const seasons = Object.keys(bySeason).sort((a, b) => (order[a] ?? 9) - (order[b] ?? 9));
@@ -702,11 +837,18 @@ function seasonGroupsHtml(items, year) {
     // OVA/劇場は年別カテゴライズなので評価値順だと分かりづらい → 発売/公開日(d)順に並べる。
     // クール(冬春夏秋)は従来どおり評価値の高い順。日付欠落は末尾、同日は評価値順。
     const isYearly = s === "OVA" || s === "MOVIE";
-    const arr = bySeason[s].slice().sort(isYearly
+    const base = bySeason[s].slice().sort(isYearly
       ? (a, b) => (a.d || Infinity) - (b.d || Infinity) || (b.sc || 0) - (a.sc || 0)
       : (a, b) => (b.sc || 0) - (a.sc || 0));
-    const shortCount = arr.filter(a => a.f === "SHORT").length;
-    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
+    // 現クールには継続作品を開始クール作品の後ろに評価値順で追加する。
+    const isCurrentCour = view.mode === "year" && !query && year === cc.year && s === cc.season;
+    const cont = isCurrentCour
+      ? continuing.slice().sort((a, b) => (b.sc || 0) - (a.sc || 0))
+      : [];
+    const arr = base.concat(cont);
+    const shortCount = base.filter(a => a.f === "SHORT").length;
+    let countText = shortCount ? `${base.length}作品（内ショート${shortCount}作品）` : `${base.length}作品`;
+    if (cont.length) countText += `＋継続${cont.length}作品`;
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
     const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
     const courKey = `${year}-${s}`;
@@ -718,7 +860,7 @@ function seasonGroupsHtml(items, year) {
         <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
-      <div class="grid">${arr.map(posterHtml).join("")}</div>
+      <div class="grid">${arr.map(a => posterHtml(a, continuingIds.has(a.id) && isCurrentCour)).join("")}</div>
     </section>`;
   }).join("");
 }
@@ -730,11 +872,12 @@ function statusIcon(st) {
   if (st === "planning") return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M6 2h12a1 1 0 011 1v19l-7-4.2L5 22V3a1 1 0 011-1z"/></svg>';
   return '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
 }
-function posterHtml(a) {
+function posterHtml(a, continuing) {
   const st = statusOf(a.id);
   const isMovie = a.f === "MOVIE";
   const isOva = a.f === "OVA";
   const cl = (isMovie || isOva) ? null : courLabel(a.ep);
+  const contBadge = continuing ? '<span class="cont">継続中</span>' : "";
   const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : (isOva ? "OVA" : "話数未定"));
   const fmtBadge = a.f === "SHORT" ? '<span class="fmt short">ショート</span>'
                  : isOva ? '<span class="fmt ova">OVA</span>'
@@ -749,11 +892,12 @@ function posterHtml(a) {
     : `<div class="noimg">${esc(a.t)}</div>`;
   return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
     ${img}
-    ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : ""}
+    ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : `<span class="score noscore">★-.-</span>`}
     <span class="status">${statusIcon(st)}</span>
     <div class="meta">
       <div class="ttl">${esc(a.t)}</div>
       <div class="sub">
+        ${contBadge}
         <span class="ep">${epText}</span>
         ${cl ? `<span class="multi">${cl.text}</span>` : ""}
         ${fmtBadge}
@@ -911,8 +1055,9 @@ function showInfo(e, id) {
              : wSt === "dropped" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中止${wEp ? `（${wEp}話で）` : ""}</div>` : "";
   card.innerHTML =
     `<div class="ic-title">${esc(a.t)}</div>` +
-    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}</div>` : "") +
-    (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(a.st)}</div>` : "") +
+    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}${a.kk ? ' <span class="ic-kakuyomu">カクヨム発</span>' : ""}</div>` : "") +
+    (a.au ? `<div class="ic-row"><span class="ic-k">原作者</span>${esc(a.au)}</div>` : "") +
+    (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(studioDisplay(a.st))}</div>` : "") +
     airRow +
     myRow + wRow +
     (chars ? `<div class="ic-chars">${chars}</div>` : "");

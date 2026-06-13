@@ -18,10 +18,15 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
     python scrape_anime.py --add "とんがり帽子のアトリエ" 200769
                                         # 個別作品をタイトル検索 or AniList ID で追加。
                                         #   ONA(配信)など通常スクレイプ対象外の作品の取りこぼし補完に使う。
+    python scrape_anime.py --authors    # 既存 anime-data.js の各作品に原作者(au)を後付け（AniList staff
+                                        #   の Original Creator/Story 等）。au 未設定のみ。--force で全件再取得。
     python scrape_anime.py --narou      # 原作がライトノベル/Web小説/小説の作品を なろう公式API で
                                         #   タイトル照合し、なろう発の作品に nr=1 を付与（未判定分のみ）。
     python scrape_anime.py --narou --force
                                         # 判定済みも含め全件を再判定。
+    python scrape_anime.py --kakuyomu   # 原作がライトノベル/Web小説/小説の作品を カクヨム検索で
+                                        #   タイトル照合し、カクヨム発の作品に kk=1 を付与（未判定分のみ）。
+                                        #   なろう発(nr=1)と判定済みの作品はスキップ。--force で全件再判定。
 
 仕様:
   - TV/ショート: format TV / TV_SHORT を season/seasonYear（放送開始クール）ごとに取得。
@@ -167,6 +172,24 @@ def studio_name(m):
     return "・".join(mains[:2]) if mains else None
 
 
+# 原作者として扱う staff role（AniList は role が自由文字列）。
+# 「Original Creator」「Original Story」「Story」「Original Concept」を原作者とみなす。
+ORIGINAL_ROLE_RE = re.compile(r"original\s+creator|original\s+story|^story$|original\s+concept", re.I)
+
+
+def original_authors(m):
+    """staff の role が原作者系のものを native 名優先で最大2名「・」連結（無ければ None）。"""
+    edges = ((m.get("staff") or {}).get("edges")) or []
+    names = []
+    for e in edges:
+        if ORIGINAL_ROLE_RE.search(e.get("role") or ""):
+            nm = (e.get("node") or {}).get("name") or {}
+            n = nm.get("native") or nm.get("full")
+            if n and n not in names:
+                names.append(n)
+    return "・".join(names[:2]) if names else None
+
+
 def official_site_url(m):
     """External & Streaming Links の「Official Site」(type INFO) の URL を返す（無ければ None）。
     右クリックメニューの「公式サイトを開く」用。AniList では公式サイトは type=INFO・
@@ -225,6 +248,7 @@ query ($season: MediaSeason, $year: Int, $page: Int, $formats: [MediaFormat]) {
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
+      staff(sort: [RELEVANCE], perPage: 8) { edges { role node { name { native full } } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
         edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
       }
@@ -254,6 +278,7 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
+      staff(sort: [RELEVANCE], perPage: 8) { edges { role node { name { native full } } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
         edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
       }
@@ -286,6 +311,7 @@ query ($page: Int) {
       staff(perPage: 2) { edges { node { id } } }
       source
       studios { edges { isMain node { name } } }
+      staff(sort: [RELEVANCE], perPage: 8) { edges { role node { name { native full } } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
         edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
       }
@@ -418,6 +444,7 @@ def fetch_movies(year, retry_on_empty=False):
 # 個別追加用: タイトル検索 / ID 指定。ONA など通常対象外の format も取り込む。
 ADD_FIELDS = ("id title{romaji native} episodes season seasonYear format averageScore genres coverImage{medium} startDate{year} "
               "externalLinks{site type url} source studios{edges{isMain node{name}}} "
+              "staff(sort: [RELEVANCE], perPage: 8){edges{role node{name{native full}}}} "
               "characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5){edges{node{name{native full}} voiceActors(language: JAPANESE){name{native full}}}}")
 ADD_BY_ID_QUERY = "query ($id: Int) { Media(id: $id, type: ANIME) { %s } }" % ADD_FIELDS
 ADD_SEARCH_QUERY = "query ($q: String) { Page(perPage: 1) { media(search: $q, type: ANIME, sort: SEARCH_MATCH) { %s } } }" % ADD_FIELDS
@@ -495,6 +522,11 @@ def enrich_record(rec, m):
         rec["st"] = st
     else:
         rec.pop("st", None)
+    au = original_authors(m)
+    if au:
+        rec["au"] = au
+    else:
+        rec.pop("au", None)
     os_url = official_site_url(m)
     if os_url:
         rec["os"] = os_url
@@ -753,6 +785,7 @@ query ($ids: [Int]) {
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
+      staff(sort: [RELEVANCE], perPage: 8) { edges { role node { name { native full } } } }
       characters(role: MAIN, sort: [ROLE, RELEVANCE], perPage: 5) {
         edges { node { name { native full } } voiceActors(language: JAPANESE) { name { native full } } }
       }
@@ -1078,18 +1111,124 @@ def run_narou(force=False):
     print(f"\n完了: {len(todo)} 件中 {hits} 件をなろう発と判定しました（{OUT_PATH} 更新済み）。", flush=True)
 
 
+# ---------- カクヨム原作判定 ----------
+# なろう同様、AniList の source ではカクヨム発かどうか区別できない（書籍化済みは LIGHT_NOVEL）ため、
+# カクヨム (https://kakuyomu.jp) の検索でタイトル照合して判定する。カクヨムは公式APIが無いが、
+# 検索ページに __NEXT_DATA__（Apollo state）として作品メタ（title/alternateTitle/totalReviewPoint）が
+# 埋め込まれているのでそれを解析する。判定結果は出力レコードの kk フィールドに持つ:
+# 1=カクヨム発 / 0=判定済み・該当なし / 無し=未判定。
+KAKUYOMU_SEARCH = "https://kakuyomu.jp/search"
+KAKUYOMU_SOURCES = NAROU_SOURCES  # 小説系原作（ライトノベル/Web小説/小説）のみ対象
+# タイトルが偶然一致した二次創作・パロディを弾く評価ポイント下限。
+# カクヨムの totalReviewPoint はなろうの global_point より桁が小さいので低めに設定。
+KAKUYOMU_MIN_POINT = 100
+
+# 書籍化後にカクヨムから削除された等で検索に出ない作品の手動指定（AniList ID）。
+KAKUYOMU_FORCE_IDS = set()
+# カクヨムに同名作品があるが実際はカクヨム発ではない作品の手動除外（AniList ID）。
+KAKUYOMU_NOT_IDS = set()
+
+
+def kakuyomu_search(title, retries=3):
+    """カクヨム検索ページの __NEXT_DATA__ から作品メタを抽出し
+    (title, alternateTitle, totalReviewPoint) の list を返す。通信失敗は None。"""
+    params = urllib.parse.urlencode({"q": title, "order": "popular"})
+    req = urllib.request.Request(
+        KAKUYOMU_SEARCH + "?" + params,
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeCatalog/1.0"},
+    )
+    for _ in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                html = resp.read().decode("utf-8", "replace")
+            m = re.search(
+                r'<script id="__NEXT_DATA__" type="application/json">(.*?)</script>',
+                html, re.S,
+            )
+            if not m:
+                return []
+            apollo = json.loads(m.group(1))["props"]["pageProps"].get("__APOLLO_STATE__", {})
+            return [
+                (v.get("title"), v.get("alternateTitle"), v.get("totalReviewPoint") or 0)
+                for k, v in apollo.items() if k.startswith("Work:")
+            ]
+        except (urllib.error.URLError, urllib.error.HTTPError, ValueError, KeyError) as e:
+            print(f"    kakuyomu search error ({e}), retry in 5s...", flush=True)
+            time.sleep(5)
+    return None
+
+
+def is_kakuyomu_origin(rec):
+    """カクヨムに同名作品（評価ポイント閾値以上）があれば カクヨム発 と判定。
+    通信失敗で判定できなかった場合は None（未判定のまま次回に持ち越す）。"""
+    q = strip_season_suffix(rec.get("t") or "")
+    if not q:
+        return False
+    key = norm_title(q)
+    failed = False
+    for word in narou_queries(q):  # タイトル分割ロジックはなろうと共通
+        works = kakuyomu_search(word)
+        if works is None:
+            failed = True
+            continue
+        for (ti, alt, point) in works:
+            if point < KAKUYOMU_MIN_POINT:
+                continue
+            for cand in (ti, alt):
+                nk = norm_title(strip_novel_annotations(cand or ""))
+                # 完全一致、またはアニメ側だけに副題が付くケースの前方一致（6文字以上に限定）。
+                if nk and (nk == key or (len(nk) >= 6 and key.startswith(nk))):
+                    return True
+        time.sleep(0.6)
+    return None if failed else False
+
+
+def run_kakuyomu(force=False):
+    """既存カタログの小説系原作の作品をカクヨム検索で照合し kk フラグを付与する。
+    未判定（kk 無し）のみ処理。force=True で全件再判定。定期チェックポイント保存あり。
+    なろう発（nr=1）と判定済みの作品はカクヨム発ではないのでスキップする。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    todo = [a for a in anime if a.get("src") in KAKUYOMU_SOURCES and (force or "kk" not in a)]
+    print(f"カクヨム判定対象: {len(todo)} / 全 {len(anime)} 件", flush=True)
+    hits = 0
+    for i, a in enumerate(todo, 1):
+        if a["id"] in KAKUYOMU_NOT_IDS or a.get("nr") == 1:
+            a["kk"] = 0
+            continue
+        if a["id"] in KAKUYOMU_FORCE_IDS:
+            a["kk"] = 1
+            hits += 1
+            continue
+        result = is_kakuyomu_origin(a)
+        if result is None:
+            continue  # 通信失敗は未判定のまま（次回実行で再試行）
+        a["kk"] = 1 if result else 0
+        if result:
+            hits += 1
+            print(f"    カクヨム発: {a['t']}（{a['y']}）", flush=True)
+        if i % 20 == 0:
+            print(f"    {i}/{len(todo)} 件判定 ...", flush=True)
+        if i % 50 == 0:
+            write_catalog(anime)  # 定期チェックポイント（中断対策）
+        time.sleep(1.0)
+    write_catalog(anime)
+    print(f"\n完了: {len(todo)} 件中 {hits} 件をカクヨム発と判定しました（{OUT_PATH} 更新済み）。", flush=True)
+
+
 ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下限
 
 
 def run_update():
     """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA に加え、
     人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。
-    最後に新規追加分（nr 未判定）のなろう原作判定も行う。"""
+    最後に新規追加分（nr/kk 未判定）のなろう・カクヨム原作判定も行う。"""
     cur = date.today().year
     print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
     run_ona_jp_merge(ONA_JP_FLOOR)
     run_narou()
+    run_kakuyomu()
 
 
 def run_full(start_year):
@@ -1144,8 +1283,13 @@ def main():
     elif args and args[0] == "--broadcast":
         # air が無い旧クール作品に MAL(Jikan) の放送曜日・時刻(bc) を補完。
         run_broadcast()
+    elif args and args[0] == "--authors":
+        # 原作者(au)をバックフィル。ENRICH_QUERY に staff を含むので run_enrich で au が付く。
+        run_enrich(predicate=lambda a: ("--force" in args) or "au" not in a)
     elif args and args[0] == "--narou":
         run_narou(force="--force" in args)
+    elif args and args[0] == "--kakuyomu":
+        run_kakuyomu(force="--force" in args)
     elif args and args[0] == "--ona-jp":
         floor = int(args[1]) if len(args) > 1 else 2000
         run_ona_jp_merge(floor)
