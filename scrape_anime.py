@@ -237,7 +237,7 @@ query ($dgt: FuzzyDateInt, $dlt: FuzzyDateInt, $page: Int, $fmt: MediaFormat) {
       averageScore
       genres
       coverImage { medium }
-      startDate { year }
+      startDate { year month day }
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
@@ -418,6 +418,16 @@ FMT = {"TV": "TV", "TV_SHORT": "SHORT", "MOVIE": "MOVIE", "OVA": "OVA"}
 YEARLY_FORMATS = ("MOVIE", "OVA")
 
 
+def release_date_int(m):
+    """AniList の startDate を年内ソート用の整数 YYYYMMDD に変換。
+    月・日が不明な場合は 0 埋め（同年内で先頭に並ぶ）。年が無ければ None。"""
+    sd = m.get("startDate") or {}
+    y = sd.get("year")
+    if not y:
+        return None
+    return y * 10000 + (sd.get("month") or 0) * 100 + (sd.get("day") or 0)
+
+
 def make_record(m, year, season, force_fmt=None):
     """AniList の media 1件を出力レコードに変換。
     MOVIE/OVA は公開年(startDate)でカテゴライズし s=フォーマット名。"""
@@ -468,6 +478,16 @@ def enrich_record(rec, m):
     else:
         rec.pop("os", None)
     rec["ch"] = char_pairs(m) or []
+    # OVA/劇場は年別カテゴライズのため、年内ソート用に発売/公開日(d=YYYYMMDD)を持たせる。
+    # TV/ショートはクール表示なので不要（付けない）。
+    if rec.get("s") in YEARLY_FORMATS:
+        d = release_date_int(m)
+        if d:
+            rec["d"] = d
+        else:
+            rec.pop("d", None)
+    else:
+        rec.pop("d", None)
 
 
 # 同一年内の表示順: クール（冬春夏秋）→ OVA → 劇場
@@ -693,6 +713,7 @@ query ($ids: [Int]) {
   Page(perPage: 25) {
     media(id_in: $ids) {
       id
+      startDate { year month day }
       externalLinks { site type url }
       source
       studios { edges { isMain node { name } } }
@@ -705,14 +726,17 @@ query ($ids: [Int]) {
 """
 
 
-def run_enrich(force=False, batch=20):
+def run_enrich(force=False, batch=20, predicate=None):
     """既存 anime-data.js の各作品に原作(src)/制作(st)/メインキャラ(ch)を後付けする。
-    ch フィールドが無いものだけを対象に id_in でバッチ取得（中断後の再実行で続きから）。
-    force=True で全件再取得。途中で定期チェックポイント保存する。"""
+    既定では ch フィールドが無いものだけを対象に id_in でバッチ取得（中断後の再実行で続きから）。
+    force=True で全件再取得。predicate を渡すと対象選択を差し替える（例: 日付バックフィル）。
+    途中で定期チェックポイント保存する。"""
+    if predicate is None:
+        predicate = lambda a: force or "ch" not in a
     existing = load_existing()
     anime = list(existing.get("anime", []))
     by_id = {a["id"]: a for a in anime}
-    todo = [a["id"] for a in anime if force or "ch" not in a]
+    todo = [a["id"] for a in anime if predicate(a)]
     print(f"エンリッチ対象: {len(todo)} / 全 {len(anime)} 件 (batch={batch})", flush=True)
     done = 0
     for i in range(0, len(todo), batch):
@@ -962,6 +986,10 @@ def main():
     elif args and args[0] == "--enrich":
         force = "--force" in args
         run_enrich(force=force)
+    elif args and args[0] == "--dates":
+        # OVA/劇場の年内ソート用に発売/公開日(d)をバックフィル。
+        force = "--force" in args
+        run_enrich(predicate=lambda a: a.get("s") in YEARLY_FORMATS and (force or "d" not in a))
     elif args and args[0] == "--narou":
         run_narou(force="--force" in args)
     elif args and args[0] == "--ona-jp":

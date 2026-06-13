@@ -699,7 +699,12 @@ function seasonGroupsHtml(items, year) {
   const order = view.mode === "collection" ? SEASON_ORDER_DISPLAY : seasonOrder(year);
   const seasons = Object.keys(bySeason).sort((a, b) => (order[a] ?? 9) - (order[b] ?? 9));
   return seasons.map(s => {
-    const arr = bySeason[s].sort((a, b) => (b.sc || 0) - (a.sc || 0));
+    // OVA/劇場は年別カテゴライズなので評価値順だと分かりづらい → 発売/公開日(d)順に並べる。
+    // クール(冬春夏秋)は従来どおり評価値の高い順。日付欠落は末尾、同日は評価値順。
+    const isYearly = s === "OVA" || s === "MOVIE";
+    const arr = bySeason[s].slice().sort(isYearly
+      ? (a, b) => (a.d || Infinity) - (b.d || Infinity) || (b.sc || 0) - (a.sc || 0)
+      : (a, b) => (b.sc || 0) - (a.sc || 0));
     const shortCount = arr.filter(a => a.f === "SHORT").length;
     const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
