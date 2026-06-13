@@ -2,3 +2,4 @@ __pycache__/
 *.pyc
 auto_update.log
 dates_backfill.log
+broadcast_backfill.log

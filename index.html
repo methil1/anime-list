@@ -882,6 +882,11 @@ function airInfoRow(a) {
     const time = `${String(j.getUTCHours()).padStart(2, "0")}:${String(j.getUTCMinutes()).padStart(2, "0")}`;
     return row("放映", `${date}（${WEEKDAY_JA[j.getUTCDay()]}）${time}〜`);
   }
+  // air 無し（旧作）は MAL の放送枠 bc=[曜日index, "HH:MM"] から毎週の放送枠を表示。
+  if (Array.isArray(a.bc) && a.bc.length) {
+    const t = a.bc[1] ? ` ${a.bc[1]}〜` : "";
+    return row("放映", `毎週${WEEKDAY_JA[a.bc[0]]}曜${t}`);
+  }
   if (a.d) return row("放映", `${fmtDateInt(a.d)} 放送開始`);
   return "";
 }

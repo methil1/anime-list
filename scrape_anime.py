@@ -781,6 +781,80 @@ def run_enrich(force=False, batch=20, predicate=None):
     print(f"\n完了: {done} 件をエンリッチしました（{OUT_PATH} 更新済み）。", flush=True)
 
 
+# ---------- MAL放送枠(Jikan)で古い作品の放映曜日・時刻を補完 ----------
+# AniListのairingScheduleが無い旧作向け。idMal経由でJikanのbroadcast(曜日・時刻)を取得する。
+JIKAN_URL = "https://api.jikan.moe/v4/anime/{}"
+WEEKDAY_EN = {"Sundays": 0, "Mondays": 1, "Tuesdays": 2, "Wednesdays": 3,
+              "Thursdays": 4, "Fridays": 5, "Saturdays": 6}
+MAL_ID_QUERY = "query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { id idMal } } }"
+
+
+def jikan_broadcast(mal_id, retries=4):
+    """Jikan(MAL)から放送枠を [曜日index(0=日), "HH:MM"] で返す。
+    時刻不明は [曜日index] のみ。曜日不明・データ無し・404 は None。"""
+    req = urllib.request.Request(
+        JIKAN_URL.format(mal_id),
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeCatalog/1.0"},
+    )
+    for _ in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            b = (data.get("data") or {}).get("broadcast") or {}
+            wd = WEEKDAY_EN.get(b.get("day"))
+            if wd is None:
+                return None
+            t = b.get("time")
+            return [wd, t] if (t and ":" in str(t)) else [wd]
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(int(e.headers.get("Retry-After", "2")) + 1)
+                continue
+            if e.code == 404:
+                return None
+            if e.code >= 500:
+                time.sleep(3)
+                continue
+            return None
+        except urllib.error.URLError:
+            time.sleep(3)
+            continue
+    return None
+
+
+def run_broadcast(batch=50):
+    """air(AniList放送スケジュール)が無いクール作品に、MAL(Jikan)の放送曜日・時刻 bc を補完。
+    bc=[曜日index, "HH:MM"]（時刻不明は[index]のみ、放送枠データ無しは 0 で処理済みマーク）。
+    既に air または bc を持つ作品はスキップ＝中断後の再実行で続きから。各バッチ後にチェックポイント保存。"""
+    cours = ("WINTER", "SPRING", "SUMMER", "FALL")
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime if a.get("s") in cours and "air" not in a and "bc" not in a]
+    print(f"放送枠補完対象: {len(todo)} 件（Jikan経由・約1件/秒）", flush=True)
+    done = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(MAL_ID_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    AniList error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        malmap = {m["id"]: m.get("idMal") for m in data["data"]["Page"]["media"]}
+        for aid in ids:
+            rec = by_id.get(aid)
+            if rec is None:
+                continue
+            mal = malmap.get(aid)
+            bc = jikan_broadcast(mal) if mal else None
+            rec["bc"] = bc if bc else 0   # 0 = 処理済み（放送枠データ無し）
+            done += 1
+            time.sleep(1.1)   # Jikan: 約60req/分
+        print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        write_catalog(anime)   # バッチ毎チェックポイント（中断対策）
+    print(f"\n完了: {done} 件を処理しました（{OUT_PATH} 更新済み）。", flush=True)
+
+
 # ---------- なろう原作判定 ----------
 # AniList の source はなろう発かどうかを区別しない（書籍化済みは LIGHT_NOVEL になる）ため、
 # なろう公式API (https://dev.syosetu.com/man/api/) でタイトル完全一致検索して判定する。
@@ -1010,6 +1084,9 @@ def main():
         # 公開/発売/放映日(d)・放映時刻(air)をバックフィル（全フォーマット）。
         force = "--force" in args
         run_enrich(predicate=lambda a: force or "d" not in a)
+    elif args and args[0] == "--broadcast":
+        # air が無い旧クール作品に MAL(Jikan) の放送曜日・時刻(bc) を補完。
+        run_broadcast()
     elif args and args[0] == "--narou":
         run_narou(force="--force" in args)
     elif args and args[0] == "--ona-jp":
