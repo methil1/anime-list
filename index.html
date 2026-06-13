@@ -809,7 +809,9 @@ function ctxInner(a) {
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
     ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
-    ${a.pv ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>` : ""}
+    ${isPrimeDirect(a)
+      ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>`
+      : `<div class="ctx-item" onclick="openPrimeSearch(${id})">🔍 プライム・ビデオで検索</div>`}
     <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>`;
 }
 function positionCtx() {
@@ -983,10 +985,30 @@ function openOfficial(id) {
   const a = catalog.find(x => x.id === id);
   if (a && a.os) window.open(a.os, "_blank", "noopener");
 }
+// pv が日本で使える直リンク(amazon.co.jp / primevideo.com)か。米国(.com等)は検索にフォールバック。
+function isPrimeDirect(a) {
+  return !!(a.pv && /(?:amazon\.co\.jp|primevideo\.com)/i.test(a.pv));
+}
+// 末尾の続編表記(第2期/2nd Season/Part 2/末尾の数字・ローマ数字)を除去（scrape_anime.py の SEASON_SUFFIX_RE 移植）。
+// 「葬送のフリーレン 第2期」→「葬送のフリーレン」のように、検索でヒットしやすいベースタイトルにする。
+const PRIME_SEASON_SUFFIX_RE = /[\s　]*(第\s*[0-9０-９]+\s*(?:期|部|シーズン|クール)|[0-9]+(?:st|nd|rd|th)\s*season|season\s*[0-9]+|part\s*[0-9]+|[0-9０-９]{1,2}|[ⅠⅡⅢⅣⅤⅥⅦⅰ-ⅶ])\s*$/i;
+function primeBaseTitle(t) {
+  let s = (t || "").trim(), prev = null;
+  while (s !== prev) { prev = s; s = s.replace(PRIME_SEASON_SUFFIX_RE, ""); }
+  return s.trim() || (t || "").trim();
+}
+function primeSearchUrl(t) {
+  return "https://www.amazon.co.jp/s?k=" + encodeURIComponent(primeBaseTitle(t)) + "&i=instant-video";
+}
 function openPrime(id) {
   hideCtxMenu();
   const a = catalog.find(x => x.id === id);
   if (a && a.pv) window.open(a.pv, "_blank", "noopener");
+}
+function openPrimeSearch(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (a) window.open(primeSearchUrl(a.t), "_blank", "noopener");
 }
 function updatePoster(id) {
   const a = catalog.find(x => x.id === id);
