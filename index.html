@@ -91,8 +91,8 @@
 
   /* Header */
   header { padding: 40px 0 18px; }
-  .title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
-  .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; }
+  .title-row { display: flex; align-items: stretch; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
+  .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; display: flex; flex-direction: column; }
   h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
@@ -102,6 +102,7 @@
   .stat { display: flex; flex-direction: column; }
   .stat .num { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
   .stat .lbl { color: var(--text-faint); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .header-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 14px; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
   .stat.maybe .num { color: var(--maybe); }
@@ -133,13 +134,31 @@
   .sched-item .t { flex: 0 0 auto; font-size: 0.62rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; }
   .sched-item .n { flex: 1 1 auto; min-width: 0; font-size: 0.66rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sched-empty { color: var(--text-faint); font-size: 0.72rem; text-align: center; }
-  /* 視聴の傾向バー */
+  /* パネルヘッダのコントロール（グラフ種別トグル＋集計タブ） */
+  .cp-head-ctrls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  .cp-chart-toggle { display: flex; gap: 4px; }
+  .cp-ctab { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-faint);
+    padding: 3px 9px; border-radius: 7px; font-size: 0.8rem; cursor: pointer; font-family: inherit; line-height: 1; transition: all .12s; }
+  .cp-ctab:hover { color: var(--text); border-color: var(--border-strong); }
+  .cp-ctab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* 視聴の傾向バー（割合） */
   .cp-bars { display: grid; gap: 7px; }
-  .cp-bar { display: grid; grid-template-columns: 5.2em 1fr 2em; gap: 9px; align-items: center; font-size: 0.78rem; }
+  .cp-bar { display: grid; grid-template-columns: 5.2em 1fr 2.8em; gap: 9px; align-items: center; font-size: 0.78rem; }
   .cp-bar .k { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .cp-bar .track { height: 8px; background: var(--bg-elev); border-radius: 999px; overflow: hidden; }
-  .cp-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); border-radius: 999px; }
+  .cp-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); border-radius: 999px;
+    transition: width .55s cubic-bezier(.16, 1, .3, 1); }
   .cp-bar .v { color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+  /* 円グラフ＋凡例 */
+  .cp-pie-wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+  .cp-pie-box { flex: 0 0 auto; }
+  .cp-pie { width: 116px; height: 116px; }
+  .cp-pie-seg { transition: stroke-dasharray .65s cubic-bezier(.16, 1, .3, 1); }
+  .cp-legend { display: flex; flex-direction: column; gap: 5px; flex: 1 1 130px; min-width: 130px; }
+  .cp-leg { display: flex; align-items: center; gap: 7px; font-size: 0.76rem; }
+  .cp-leg-dot { width: 9px; height: 9px; border-radius: 2px; flex: 0 0 auto; }
+  .cp-leg-k { flex: 1 1 auto; min-width: 0; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cp-leg-v { color: var(--text-faint); font-variant-numeric: tabular-nums; }
   @media (max-width: 820px) { .context-panel { display: none; } }
 
   /* Toolbar */
@@ -334,10 +353,8 @@
     </div>
 
     <nav class="rail-views">
-      <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
-      <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 評価順</button>
-      <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着</button>
-      <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
+      <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
+      <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 自己評価順</button>
     </nav>
 
     <div class="rail-group">
@@ -378,6 +395,10 @@
           <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
           <p class="src-note" id="src-note"></p>
           <div class="stats" id="stats"></div>
+          <div class="header-actions">
+            <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着更新分</button>
+            <button class="ytab" id="score-btn" onclick="toggleScores()">★ 海外評価値表示</button>
+          </div>
         </div>
         <div class="context-panel" id="context-panel"></div>
       </div>
@@ -480,6 +501,7 @@ function setStatus(id, status, ep) {
   }
   if (e.s || e.r) watch[id] = e; else delete watch[id];
   saveWatch();
+  renderContextPanel();   // 傾向グラフを最新の視聴状態で更新
 }
 // 視聴話数（視聴中/視聴中止のみ保持）。
 function setEp(id, val) {
@@ -489,12 +511,14 @@ function setEp(id, val) {
   saveWatch();
   renderStats(); updatePoster(id);
 }
+
 // 自分評価（1-5。同じ星を再クリックで解除）。
 function setRating(id, r) {
   const cur = watch[id] || {};
   if (r > 0) cur.r = r; else delete cur.r;
   if (cur.s || cur.r) watch[id] = cur; else delete watch[id];
   saveWatch();
+  renderContextPanel();   // 評価タブの傾向グラフを更新
 }
 
 /* ---------- helpers ---------- */
@@ -592,7 +616,7 @@ function applyScoreVisibility() {
   const btn = document.getElementById("score-btn");
   if (btn) {
     btn.classList.toggle("active", showScores);
-    btn.textContent = showScores ? "★ 評価値を非表示" : "★ 評価値を表示";
+    btn.textContent = showScores ? "★ 海外評価値を非表示" : "★ 海外評価値表示";
   }
 }
 function toggleScores() { showScores = !showScores; applyScoreVisibility(); }
@@ -813,7 +837,8 @@ function renderStats() {
 }
 
 /* ---------- 右上コンテキストパネル ---------- */
-let panelStat = "genre";   // 視聴の傾向パネルの表示軸: "genre" | "decade"
+let panelStat = "genre";    // 視聴の傾向パネルの集計軸: "genre" | "decade" | "studio" | "rating"
+let panelChart = "bar";     // グラフ種別: "bar"(割合バー) | "pie"(円グラフ)
 
 // クール作品の毎週の放送枠を {day(0=日), mins(0時からの分), time("HH:MM")} で返す。
 // air(第1話airingAt, unix秒UTC)優先＝JST固定(+9h)。無ければ bc=[曜日, "HH:MM"]。どちらも無ければ null。
@@ -862,58 +887,87 @@ function schedulePanelHtml() {
   }).join("");
   return `${head}<div class="sched">${cols}</div>${undated ? `<div class="sched-empty" style="margin-top:7px">放送枠不明 ${undated}本</div>` : ""}`;
 }
-// コレクション時パネル: 視聴済の傾向（ジャンル別 / 年代別の本数バー、切替式）。
-function barHtml(k, v, max) {
-  const pct = max ? Math.round(v / max * 100) : 0;
-  return `<div class="cp-bar"><span class="k">${esc(k)}</span><span class="track"><span class="fill" style="width:${pct}%"></span></span><span class="v">${v}</span></div>`;
-}
-function statsPanelHtml() {
+// ---- コレクション時パネル: 視聴済の傾向（割合バー / 円グラフ切替）----
+const PIE_COLORS = ["#7c5cff", "#34d399", "#fbbf24", "#38bdf8", "#f472b6", "#f87171", "#a48bff", "#4ade80", "#94a3b8"];
+
+// 現在の集計軸(panelStat)の系列を返す。entries=[[label,value]...], total=合計, grouped=上位8+その他にまとめるか。
+function statsData() {
   const watched = catalog.filter(a => ["done", "maybe", "watching"].includes(statusOf(a.id)));
-  const tabs = `<div class="cp-tabs">
-    <button class="cp-tab ${panelStat === "genre" ? "active" : ""}" onclick="setPanelStat('genre')">ジャンル</button>
-    <button class="cp-tab ${panelStat === "decade" ? "active" : ""}" onclick="setPanelStat('decade')">年代</button>
-    <button class="cp-tab ${panelStat === "studio" ? "active" : ""}" onclick="setPanelStat('studio')">製作会社</button>
-    <button class="cp-tab ${panelStat === "rating" ? "active" : ""}" onclick="setPanelStat('rating')">評価</button>
-  </div>`;
-  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
-  if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
-  let bars;
-  if (panelStat === "genre") {
-    const cnt = {};
-    for (const a of watched) for (const g of (a.g || [])) cnt[g] = (cnt[g] || 0) + 1;
-    const top = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 8);
-    const max = top.length ? top[0][1] : 1;
-    bars = top.length ? top.map(([k, v]) => barHtml(k, v, max)).join("") : `<div class="sched-empty">ジャンル情報がありません。</div>`;
-  } else if (panelStat === "studio") {
+  let entries = [], grouped = true, empty = "";
+  if (panelStat === "studio") {
     const cnt = {};
     for (const a of watched) for (const st of (a.st ? a.st.split("・") : [])) { const s = st.trim(); if (s) cnt[s] = (cnt[s] || 0) + 1; }
-    const top = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 8);
-    const max = top.length ? top[0][1] : 1;
-    bars = top.length ? top.map(([k, v]) => barHtml(k, v, max)).join("") : `<div class="sched-empty">製作会社情報がありません。</div>`;
+    entries = Object.entries(cnt).sort((x, y) => y[1] - x[1]);
+    empty = "製作会社情報がありません。";
   } else if (panelStat === "rating") {
     const cnt = {};
-    let total = 0;
-    for (const a of watched) { const r = ratingOf(a.id); if (r > 0) { cnt[r] = (cnt[r] || 0) + 1; total++; } }
-    if (!total) return `${head}<div class="sched-empty">評価を付けた作品がまだありません。</div>`;
-    const max = Math.max(...Object.values(cnt));
-    bars = [5, 4, 3, 2, 1].map(r => barHtml("★".repeat(r), cnt[r] || 0, max)).join("");
-  } else {
+    for (const a of watched) { const r = ratingOf(a.id); if (r > 0) cnt[r] = (cnt[r] || 0) + 1; }
+    entries = [5, 4, 3, 2, 1].filter(r => cnt[r]).map(r => ["★".repeat(r), cnt[r]]);
+    grouped = false; empty = "評価を付けた作品がまだありません。";
+  } else if (panelStat === "decade") {
     const cnt = {};
     for (const a of watched) { const d = Math.floor(a.y / 10) * 10; cnt[d] = (cnt[d] || 0) + 1; }
-    const ks = Object.keys(cnt).map(Number).sort((a, b) => b - a);
-    const max = Math.max(...ks.map(d => cnt[d]));
-    bars = ks.map(d => barHtml(`${d}年代`, cnt[d], max)).join("");
+    entries = Object.keys(cnt).map(Number).sort((a, b) => b - a).map(d => [`${d}年代`, cnt[d]]);
+    grouped = false; empty = "データがありません。";
+  } else { // genre
+    const cnt = {};
+    for (const a of watched) for (const g of (a.g || [])) cnt[g] = (cnt[g] || 0) + 1;
+    entries = Object.entries(cnt).sort((x, y) => y[1] - x[1]);
+    empty = "ジャンル情報がありません。";
   }
-  return `${head}<div class="cp-bars">${bars}</div>`;
+  const total = entries.reduce((s, e) => s + e[1], 0);
+  return { watched, entries, total, grouped, empty };
+}
+// 割合バー1本（幅=全体に対する%。初期幅0でアニメーション）。
+function barHtml(k, v, total) {
+  const pct = total ? Math.round(v / total * 100) : 0;
+  return `<div class="cp-bar" title="${esc(k)}: ${v}本 (${pct}%)"><span class="k">${esc(k)}</span><span class="track"><span class="fill" style="width:0" data-w="${pct}"></span></span><span class="v">${pct}%</span></div>`;
+}
+// 円グラフ（r=15.915 → 円周≈100で dasharray が%と一致）＋凡例。初期 0 100 でアニメーション。
+function pieHtml(disp, total) {
+  let acc = 0;
+  const segs = disp.map(([k, v], i) => {
+    const pct = total ? v / total * 100 : 0;
+    const seg = { k, v, pct: Math.round(pct), color: PIE_COLORS[i % PIE_COLORS.length], dash: `${pct.toFixed(2)} ${(100 - pct).toFixed(2)}`, offset: (25 - acc).toFixed(2) };
+    acc += pct;
+    return seg;
+  });
+  const circles = segs.map(s => `<circle class="cp-pie-seg" cx="18" cy="18" r="15.915" fill="none" stroke="${s.color}" stroke-width="4.2" stroke-dasharray="0 100" data-dash="${s.dash}" stroke-dashoffset="${s.offset}"></circle>`).join("");
+  const legend = segs.map(s => `<div class="cp-leg" title="${esc(s.k)}: ${s.v}本"><span class="cp-leg-dot" style="background:${s.color}"></span><span class="cp-leg-k">${esc(s.k)}</span><span class="cp-leg-v">${s.pct}%</span></div>`).join("");
+  return `<div class="cp-pie-wrap"><div class="cp-pie-box"><svg class="cp-pie" viewBox="0 0 36 36">${circles}</svg></div><div class="cp-legend">${legend}</div></div>`;
+}
+function statsPanelHtml() {
+  const { watched, entries, total, grouped, empty } = statsData();
+  const tab = (key, label) => `<button class="cp-tab ${panelStat === key ? "active" : ""}" onclick="setPanelStat('${key}')">${label}</button>`;
+  const ctab = (key, label) => `<button class="cp-ctab ${panelChart === key ? "active" : ""}" onclick="setPanelChart('${key}')" title="${label}グラフ">${label}</button>`;
+  const tabs = `<div class="cp-tabs">${tab("genre", "ジャンル")}${tab("decade", "年代")}${tab("studio", "製作会社")}${tab("rating", "評価")}</div>`;
+  const toggle = `<div class="cp-chart-toggle">${ctab("bar", "棒")}${ctab("pie", "円")}</div>`;
+  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span><div class="cp-head-ctrls">${toggle}${tabs}</div></div>`;
+  if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
+  if (!entries.length || !total) return `${head}<div class="sched-empty">${empty}</div>`;
+  let disp = entries;
+  if (grouped && entries.length > 8) {
+    const top = entries.slice(0, 8);
+    const rest = entries.slice(8).reduce((s, e) => s + e[1], 0);
+    disp = rest ? top.concat([["その他", rest]]) : top;
+  }
+  if (panelChart === "pie") return `${head}${pieHtml(disp, total)}`;
+  return `${head}<div class="cp-bars">${disp.map(([k, v]) => barHtml(k, v, total)).join("")}</div>`;
 }
 function setPanelStat(s) { panelStat = s; renderContextPanel(); }
+function setPanelChart(c) { panelChart = c; renderContextPanel(); }
 // ビューに応じてパネルの中身を切替。年別=放送表 / コレクション=傾向 / 新着・検索中=非表示。
 function renderContextPanel() {
   const el = document.getElementById("context-panel");
   if (!el) return;
   if (query) { el.innerHTML = ""; return; }
-  if (view.mode === "collection") el.innerHTML = statsPanelHtml();
-  else if (view.mode === "year") el.innerHTML = schedulePanelHtml();
+  if (view.mode === "collection") {
+    el.innerHTML = statsPanelHtml();
+    requestAnimationFrame(() => {   // 0→目標値へトランジションでアニメーション
+      el.querySelectorAll(".cp-bar .fill").forEach(f => { f.style.width = (f.dataset.w || 0) + "%"; });
+      el.querySelectorAll(".cp-pie-seg").forEach(s => { if (s.dataset.dash) s.setAttribute("stroke-dasharray", s.dataset.dash); });
+    });
+  } else if (view.mode === "year") el.innerHTML = schedulePanelHtml();
   else el.innerHTML = "";
 }
 
