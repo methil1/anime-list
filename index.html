@@ -134,21 +134,6 @@
   .sched-item .t { flex: 0 0 auto; font-size: 0.62rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; }
   .sched-item .n { flex: 1 1 auto; min-width: 0; font-size: 0.66rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .sched-empty { color: var(--text-faint); font-size: 0.72rem; text-align: center; }
-  /* パネルヘッダのコントロール（グラフ種別トグル＋集計タブ） */
-  .cp-head-ctrls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
-  .cp-chart-toggle { display: flex; gap: 4px; }
-  .cp-ctab { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-faint);
-    padding: 3px 9px; border-radius: 7px; font-size: 0.8rem; cursor: pointer; font-family: inherit; line-height: 1; transition: all .12s; }
-  .cp-ctab:hover { color: var(--text); border-color: var(--border-strong); }
-  .cp-ctab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
-  /* 視聴の傾向バー（割合） */
-  .cp-bars { display: grid; gap: 7px; }
-  .cp-bar { display: grid; grid-template-columns: 5.2em 1fr 2.8em; gap: 9px; align-items: center; font-size: 0.78rem; }
-  .cp-bar .k { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .cp-bar .track { height: 8px; background: var(--bg-elev); border-radius: 999px; overflow: hidden; }
-  .cp-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); border-radius: 999px;
-    transition: width .55s cubic-bezier(.16, 1, .3, 1); }
-  .cp-bar .v { color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
   /* 円グラフ＋凡例 */
   .cp-pie-wrap { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
   .cp-pie-box { flex: 0 0 auto; }
@@ -238,7 +223,12 @@
   .cour-head-toggle { font-size: 0.8rem; min-width: 1.1em; color: var(--text-faint); }
   .cour-head.s-recent { cursor: default; }
   .cour.collapsed .grid { display: none; }
+  .cour.collapsed .cour-body { display: none; }
   .cour.collapsed .cour-head { margin-bottom: 0; }
+  /* 自己評価ページの年代小見出し（年→クール無しの控えめ表示） */
+  .rate-decade { margin-top: 16px; }
+  .rate-decade-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 1rem; font-weight: 700; color: var(--text-dim); }
+  .rate-decade-head .count { font-size: 0.78rem; font-weight: 600; color: var(--text-faint); }
   .cour-head .season { font-size: 1.15rem; font-weight: 700; }
   .cour-head .count { color: var(--text-faint); font-size: 0.82rem; }
   .cour-head .line { flex: 1; }
@@ -838,7 +828,6 @@ function renderStats() {
 
 /* ---------- 右上コンテキストパネル ---------- */
 let panelStat = "genre";    // 視聴の傾向パネルの集計軸: "genre" | "decade" | "studio" | "rating"
-let panelChart = "bar";     // グラフ種別: "bar"(割合バー) | "pie"(円グラフ)
 
 // クール作品の毎週の放送枠を {day(0=日), mins(0時からの分), time("HH:MM")} で返す。
 // air(第1話airingAt, unix秒UTC)優先＝JST固定(+9h)。無ければ bc=[曜日, "HH:MM"]。どちらも無ければ null。
@@ -918,11 +907,6 @@ function statsData() {
   const total = entries.reduce((s, e) => s + e[1], 0);
   return { watched, entries, total, grouped, empty };
 }
-// 割合バー1本（幅=全体に対する%。初期幅0でアニメーション）。
-function barHtml(k, v, total) {
-  const pct = total ? Math.round(v / total * 100) : 0;
-  return `<div class="cp-bar" title="${esc(k)}: ${v}本 (${pct}%)"><span class="k">${esc(k)}</span><span class="track"><span class="fill" style="width:0" data-w="${pct}"></span></span><span class="v">${pct}%</span></div>`;
-}
 // 円グラフ（r=15.915 → 円周≈100で dasharray が%と一致）＋凡例。初期 0 100 でアニメーション。
 function pieHtml(disp, total) {
   let acc = 0;
@@ -939,10 +923,8 @@ function pieHtml(disp, total) {
 function statsPanelHtml() {
   const { watched, entries, total, grouped, empty } = statsData();
   const tab = (key, label) => `<button class="cp-tab ${panelStat === key ? "active" : ""}" onclick="setPanelStat('${key}')">${label}</button>`;
-  const ctab = (key, label) => `<button class="cp-ctab ${panelChart === key ? "active" : ""}" onclick="setPanelChart('${key}')" title="${label}グラフ">${label}</button>`;
   const tabs = `<div class="cp-tabs">${tab("genre", "ジャンル")}${tab("decade", "年代")}${tab("studio", "製作会社")}${tab("rating", "評価")}</div>`;
-  const toggle = `<div class="cp-chart-toggle">${ctab("bar", "棒")}${ctab("pie", "円")}</div>`;
-  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span><div class="cp-head-ctrls">${toggle}${tabs}</div></div>`;
+  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
   if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
   if (!entries.length || !total) return `${head}<div class="sched-empty">${empty}</div>`;
   let disp = entries;
@@ -951,11 +933,9 @@ function statsPanelHtml() {
     const rest = entries.slice(8).reduce((s, e) => s + e[1], 0);
     disp = rest ? top.concat([["その他", rest]]) : top;
   }
-  if (panelChart === "pie") return `${head}${pieHtml(disp, total)}`;
-  return `${head}<div class="cp-bars">${disp.map(([k, v]) => barHtml(k, v, total)).join("")}</div>`;
+  return `${head}${pieHtml(disp, total)}`;
 }
 function setPanelStat(s) { panelStat = s; renderContextPanel(); }
-function setPanelChart(c) { panelChart = c; renderContextPanel(); }
 // ビューに応じてパネルの中身を切替。年別=放送表 / コレクション=傾向 / 新着・検索中=非表示。
 function renderContextPanel() {
   const el = document.getElementById("context-panel");
@@ -964,7 +944,6 @@ function renderContextPanel() {
   if (view.mode === "collection") {
     el.innerHTML = statsPanelHtml();
     requestAnimationFrame(() => {   // 0→目標値へトランジションでアニメーション
-      el.querySelectorAll(".cp-bar .fill").forEach(f => { f.style.width = (f.dataset.w || 0) + "%"; });
       el.querySelectorAll(".cp-pie-seg").forEach(s => { if (s.dataset.dash) s.setAttribute("stroke-dasharray", s.dataset.dash); });
     });
   } else if (view.mode === "year") el.innerHTML = schedulePanelHtml();
@@ -1047,6 +1026,19 @@ function yearBlockHtml(y, yearItems, isCollection, prefix = "") {
 
 // 視聴コレクション「評価順」: 自己評価(1-5)を付けた作品を ★5→★1 の順に並べ、
 // 各評価内では放送が古い順（クール別には分けない）。
+// 自己評価ページ用: 年代だけで分割し、各年代内は古い順（年→クール階層なし、見出しは控えめ）。
+function ratingDecadeHtml(arr) {
+  const byDec = {};
+  for (const a of arr) (byDec[decadeOf(a.y)] = byDec[decadeOf(a.y)] || []).push(a);
+  const decs = Object.keys(byDec).map(Number).sort((a, b) => a - b);   // 古い順（昇順）
+  return decs.map(d => {
+    const items = byDec[d].slice().sort((a, b) => chronoKey(a) - chronoKey(b));   // 各年代内も古い順
+    return `<div class="rate-decade">
+      <div class="rate-decade-head"><span>${d}年代</span><span class="count">${countBreakdown(items)}</span></div>
+      <div class="grid">${items.map(a => posterHtml(a)).join("")}</div>
+    </div>`;
+  }).join("");
+}
 function renderCollectionByRating(list) {
   const items = catalog.filter(a => ratingOf(a.id) > 0 && passStatus(a));
   if (items.length === 0) {
@@ -1056,16 +1048,19 @@ function renderCollectionByRating(list) {
   const byRating = {};
   for (const a of items) (byRating[ratingOf(a.id)] = byRating[ratingOf(a.id)] || []).push(a);
   const html = [5, 4, 3, 2, 1].filter(r => byRating[r]).map(r => {
-    const arr = byRating[r].slice().sort((a, b) => chronoKey(a) - chronoKey(b));
-    const shortCount = arr.filter(a => a.f === "SHORT").length;
-    const countText = shortCount ? `${arr.length}作品（内ショート${shortCount}作品）` : `${arr.length}作品`;
-    return `<section class="cour">
-      <div class="cour-head s-recent">
+    const arr = byRating[r];
+    const countText = countBreakdown(arr);
+    const key = `rate-${r}`;
+    const collapsed = collapsedCours.has(key);
+    // 各評価グループの中を 年代→年→クール で階層表示（折りたたみキーは rateN: で名前空間化）。
+    return `<section class="cour ${collapsed ? "collapsed" : ""}" id="cour-${key}">
+      <div class="cour-head s-recent" onclick="toggleCour('${key}')">
+        <span class="cour-head-toggle">${collapsed ? "▶" : "▼"}</span>
         <span class="season">自己評価 ${"★".repeat(r)}（${r}点）</span>
         <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
-      <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
+      <div class="cour-body">${ratingDecadeHtml(arr)}</div>
     </section>`;
   }).join("");
   list.innerHTML = `<div class="year-block">${html}</div>`;
