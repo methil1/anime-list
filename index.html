@@ -98,10 +98,10 @@
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
 
-  .stats { display: flex; gap: 22px; margin-top: 22px; flex-wrap: wrap; }
+  .stats { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; }
-  .stat .num { font-size: 1.7rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; }
-  .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat .num { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
+  .stat .lbl { color: var(--text-faint); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
   .stat.maybe .num { color: var(--maybe); }
@@ -377,10 +377,10 @@
           <h1>アニメ<span class="accent">視聴備忘録</span></h1>
           <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
           <p class="src-note" id="src-note"></p>
+          <div class="stats" id="stats"></div>
         </div>
         <div class="context-panel" id="context-panel"></div>
       </div>
-      <div class="stats" id="stats"></div>
     </header>
 
     <div id="list"></div>
