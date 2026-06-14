@@ -227,7 +227,10 @@
   .cour.collapsed .cour-head { margin-bottom: 0; }
   /* 自己評価ページの年代小見出し（年→クール無しの控えめ表示） */
   .rate-decade { margin-top: 16px; }
-  .rate-decade-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 1rem; font-weight: 700; color: var(--text-dim); }
+  .rate-decade.collapsed .grid { display: none; }
+  .rate-decade.collapsed .rate-decade-head { margin-bottom: 0; }
+  .rate-decade-head { display: flex; align-items: baseline; gap: 10px; margin-bottom: 8px; font-size: 1rem; font-weight: 700; color: var(--text-dim); cursor: pointer; }
+  .rate-decade-head .cour-head-toggle { flex: 0 0 auto; }
   .rate-decade-head .count { font-size: 0.78rem; font-weight: 600; color: var(--text-faint); }
   .cour-head .season { font-size: 1.15rem; font-weight: 700; }
   .cour-head .count { color: var(--text-faint); font-size: 0.82rem; }
@@ -827,7 +830,7 @@ function renderStats() {
 }
 
 /* ---------- 右上コンテキストパネル ---------- */
-let panelStat = "genre";    // 視聴の傾向パネルの集計軸: "genre" | "decade" | "studio" | "rating"
+let panelStat = "source";   // 視聴の傾向パネルの集計軸: "source"(原作) | "decade" | "studio" | "rating"
 
 // クール作品の毎週の放送枠を {day(0=日), mins(0時からの分), time("HH:MM")} で返す。
 // air(第1話airingAt, unix秒UTC)優先＝JST固定(+9h)。無ければ bc=[曜日, "HH:MM"]。どちらも無ければ null。
@@ -898,11 +901,11 @@ function statsData() {
     for (const a of watched) { const d = Math.floor(a.y / 10) * 10; cnt[d] = (cnt[d] || 0) + 1; }
     entries = Object.keys(cnt).map(Number).sort((a, b) => b - a).map(d => [`${d}年代`, cnt[d]]);
     grouped = false; empty = "データがありません。";
-  } else { // genre
+  } else { // source（原作）
     const cnt = {};
-    for (const a of watched) for (const g of (a.g || [])) cnt[g] = (cnt[g] || 0) + 1;
+    for (const a of watched) { if (a.src) cnt[a.src] = (cnt[a.src] || 0) + 1; }
     entries = Object.entries(cnt).sort((x, y) => y[1] - x[1]);
-    empty = "ジャンル情報がありません。";
+    empty = "原作情報がありません。";
   }
   const total = entries.reduce((s, e) => s + e[1], 0);
   return { watched, entries, total, grouped, empty };
@@ -923,7 +926,7 @@ function pieHtml(disp, total) {
 function statsPanelHtml() {
   const { watched, entries, total, grouped, empty } = statsData();
   const tab = (key, label) => `<button class="cp-tab ${panelStat === key ? "active" : ""}" onclick="setPanelStat('${key}')">${label}</button>`;
-  const tabs = `<div class="cp-tabs">${tab("genre", "ジャンル")}${tab("decade", "年代")}${tab("studio", "製作会社")}${tab("rating", "評価")}</div>`;
+  const tabs = `<div class="cp-tabs">${tab("source", "原作")}${tab("decade", "年代")}${tab("studio", "製作会社")}${tab("rating", "評価")}</div>`;
   const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
   if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
   if (!entries.length || !total) return `${head}<div class="sched-empty">${empty}</div>`;
@@ -1027,14 +1030,16 @@ function yearBlockHtml(y, yearItems, isCollection, prefix = "") {
 // 視聴コレクション「評価順」: 自己評価(1-5)を付けた作品を ★5→★1 の順に並べ、
 // 各評価内では放送が古い順（クール別には分けない）。
 // 自己評価ページ用: 年代だけで分割し、各年代内は古い順（年→クール階層なし、見出しは控えめ）。
-function ratingDecadeHtml(arr) {
+function ratingDecadeHtml(arr, r) {
   const byDec = {};
   for (const a of arr) (byDec[decadeOf(a.y)] = byDec[decadeOf(a.y)] || []).push(a);
   const decs = Object.keys(byDec).map(Number).sort((a, b) => a - b);   // 古い順（昇順）
   return decs.map(d => {
     const items = byDec[d].slice().sort((a, b) => chronoKey(a) - chronoKey(b));   // 各年代内も古い順
-    return `<div class="rate-decade">
-      <div class="rate-decade-head"><span>${d}年代</span><span class="count">${countBreakdown(items)}</span></div>
+    const key = `ratedec-${r}-${d}`;
+    const collapsed = collapsedCours.has(key);
+    return `<div class="rate-decade ${collapsed ? "collapsed" : ""}" id="cour-${key}">
+      <div class="rate-decade-head" onclick="toggleCour('${key}')"><span class="cour-head-toggle">${collapsed ? "▶" : "▼"}</span><span>${d}年代</span><span class="count">${countBreakdown(items)}</span></div>
       <div class="grid">${items.map(a => posterHtml(a)).join("")}</div>
     </div>`;
   }).join("");
@@ -1060,7 +1065,7 @@ function renderCollectionByRating(list) {
         <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
-      <div class="cour-body">${ratingDecadeHtml(arr)}</div>
+      <div class="cour-body">${ratingDecadeHtml(arr, r)}</div>
     </section>`;
   }).join("");
   list.innerHTML = `<div class="year-block">${html}</div>`;
