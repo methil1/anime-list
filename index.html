@@ -39,6 +39,56 @@
   }
   .wrap { max-width: 1280px; margin: 0 auto; padding: 0 20px 100px; }
 
+  /* アプリシェル: 左レール / 中央 / (右マージンは広告用に温存) */
+  .shell {
+    max-width: 1360px; margin: 0 auto; padding: 0 20px 100px;
+    display: grid; grid-template-columns: 212px minmax(0, 1fr); gap: 30px; align-items: start;
+  }
+  .rail {
+    position: sticky; top: 16px; align-self: start;
+    max-height: calc(100vh - 32px); overflow-y: auto; overflow-x: hidden;
+    padding: 16px 4px 16px 0; margin-top: 24px;
+    display: flex; flex-direction: column; gap: 18px;
+    scrollbar-width: thin; scrollbar-color: var(--border-strong) transparent;
+  }
+  .rail::-webkit-scrollbar { width: 6px; }
+  .rail::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  .rail .search { width: 100%; min-width: 0; flex: 0 0 auto; }
+  .rail-views { display: flex; flex-direction: column; gap: 6px; }
+  .rail-views .ytab { width: 100%; text-align: left; }
+  .rail-group { display: flex; flex-direction: column; gap: 9px; }
+  .rail-label { color: var(--text-faint); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  /* レール内の年ナビ: 年代折りたたみ */
+  .rail .yearbar { display: flex; flex-direction: column; gap: 4px; overflow: visible; margin-top: 0; padding-bottom: 0; }
+  .rail-dec-head {
+    width: 100%; display: flex; align-items: center; gap: 7px; text-align: left;
+    background: none; border: 0; color: var(--text-dim); cursor: pointer; font-family: inherit;
+    font-size: 0.82rem; font-weight: 700; padding: 5px 4px; border-radius: 6px; transition: color .12s, background .12s;
+  }
+  .rail-dec-head:hover { color: var(--text); background: var(--bg-elev); }
+  .rail-dec-tog { color: var(--text-faint); font-size: 0.7rem; width: 0.9em; flex: 0 0 auto; }
+  .rail-dec-years { display: flex; flex-wrap: wrap; gap: 5px; padding: 2px 0 6px 16px; }
+  .rail-dec-years .ytab { padding: 6px 10px; font-size: 0.82rem; }
+  .rail-dec.folded .rail-dec-years { display: none; }
+  .main { min-width: 0; }
+  .main header { padding-top: 24px; }
+
+  @media (max-width: 900px) {
+    .shell { display: block; max-width: 1280px; }
+    .rail {
+      position: static; max-height: none; overflow: visible; margin-top: 16px; padding: 0;
+      flex-direction: row; flex-wrap: wrap; gap: 12px 18px; align-items: flex-start;
+    }
+    .rail .search { flex: 1 1 240px; }
+    .rail-views { flex-direction: row; flex-wrap: wrap; }
+    .rail-views .ytab { width: auto; }
+    .rail-group { flex: 1 1 100%; flex-direction: row; flex-wrap: wrap; align-items: center; gap: 8px; }
+    .rail-label { width: 100%; }
+    .rail .yearbar { flex-direction: row; flex-wrap: wrap; }
+    .rail-dec-years { padding-left: 0; }
+    .main header { padding-top: 12px; }
+  }
+
   /* Header */
   header { padding: 40px 0 18px; }
   .title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
@@ -276,67 +326,73 @@
 </style>
 </head>
 <body>
-<div class="wrap">
-  <header>
-    <div class="title-row">
-      <div class="title-block">
-        <h1>アニメ<span class="accent">視聴備忘録</span></h1>
-        <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
-        <p class="src-note" id="src-note"></p>
-      </div>
-      <div class="context-panel" id="context-panel"></div>
-    </div>
-    <div class="stats" id="stats"></div>
-  </header>
-
-  <div class="collection-bar">
-    <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
-    <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 評価順</button>
-    <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着</button>
-    <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
-  </div>
-
-  <div class="toolbar">
+<div class="shell">
+  <aside class="rail" id="rail">
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索（全年代）..." oninput="onSearch()">
+      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索..." oninput="onSearch()">
     </div>
-    <div class="chips" id="filters">
-      <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
-      <button class="chip done" data-f="done" onclick="setFilter('done')">視聴済</button>
-      <button class="chip watching" data-f="watching" onclick="setFilter('watching')">視聴中</button>
-      <button class="chip planning" data-f="planning" onclick="setFilter('planning')">視聴予定</button>
-      <button class="chip dropped" data-f="dropped" onclick="setFilter('dropped')">視聴中止</button>
-      <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
-      <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
+
+    <nav class="rail-views">
+      <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ 視聴コレクション</button>
+      <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 評価順</button>
+      <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着</button>
+      <button class="ytab" id="score-btn" onclick="toggleScores()">★ 評価値を表示</button>
+    </nav>
+
+    <div class="rail-group">
+      <div class="rail-label">状態</div>
+      <div class="chips" id="filters">
+        <button class="chip active" data-f="all" onclick="setFilter('all')">すべて</button>
+        <button class="chip done" data-f="done" onclick="setFilter('done')">視聴済</button>
+        <button class="chip watching" data-f="watching" onclick="setFilter('watching')">視聴中</button>
+        <button class="chip planning" data-f="planning" onclick="setFilter('planning')">視聴予定</button>
+        <button class="chip dropped" data-f="dropped" onclick="setFilter('dropped')">視聴中止</button>
+        <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
+        <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
+      </div>
     </div>
-  </div>
 
-  <div class="toolbar" style="margin-top:10px">
-    <span class="tlabel">形式</span>
-    <div class="chips" id="formatfilters">
-      <button class="chip active" data-ff="all" onclick="setFormat('all')">すべて</button>
-      <button class="chip" data-ff="TV" onclick="setFormat('TV')">TV</button>
-      <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
-      <button class="chip" data-ff="OVA" onclick="setFormat('OVA')">OVA</button>
-      <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場アニメ</button>
+    <div class="rail-group">
+      <div class="rail-label">形式</div>
+      <div class="chips" id="formatfilters">
+        <button class="chip active" data-ff="all" onclick="setFormat('all')">すべて</button>
+        <button class="chip" data-ff="TV" onclick="setFormat('TV')">TV</button>
+        <button class="chip" data-ff="SHORT" onclick="setFormat('SHORT')">ショート</button>
+        <button class="chip" data-ff="OVA" onclick="setFormat('OVA')">OVA</button>
+        <button class="chip" data-ff="MOVIE" onclick="setFormat('MOVIE')">劇場アニメ</button>
+      </div>
     </div>
-  </div>
 
-  <div class="yearbar" id="yearbar"></div>
+    <div class="rail-group">
+      <div class="rail-label">年で移動</div>
+      <div class="yearbar" id="yearbar"></div>
+    </div>
+  </aside>
 
-  <div id="list"></div>
+  <main class="main">
+    <header>
+      <div class="title-row">
+        <div class="title-block">
+          <h1>アニメ<span class="accent">視聴備忘録</span></h1>
+          <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
+          <p class="src-note" id="src-note"></p>
+        </div>
+        <div class="context-panel" id="context-panel"></div>
+      </div>
+      <div class="stats" id="stats"></div>
+    </header>
 
-  <p class="yearbar-label">年で移動</p>
-  <div class="yearbar" id="yearbar-bottom"></div>
+    <div id="list"></div>
 
-  <div class="foot-note">
-    視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
-    <a onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
-    <a onclick="importWatch()">読み込み</a>
-  </div>
+    <div class="foot-note">
+      視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
+      <a onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
+      <a onclick="importWatch()">読み込み</a>
+    </div>
 
-  <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a></p>
+    <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a></p>
+  </main>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -377,6 +433,8 @@ let showScores = false;   // 評価値（★）の表示。デフォルト非表
 let collapsedDecades = new Set(); // 折りたたみ中の年代（collection モード用、キー=10年区切りの開始年）
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
 let collapsedCours = new Set();   // 折りたたみ中のクール（キー=`${year}-${season}`）
+let railFoldedDecades = new Set(); // 左レール年ナビで畳んでいる年代（最新年代以外を初期で畳む）
+let railFoldInit = false;
 
 /* ---------- persistence ----------
    watch[id] = { s: 状態, ep: 話数, r: 自分評価1-5 }。
@@ -540,9 +598,29 @@ function toggleScores() { showScores = !showScores; applyScoreVisibility(); }
 
 /* ---------- year nav ---------- */
 function yearbarHtml() {
-  return years.map(y =>
-    `<button class="ytab ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`
-  ).join("");
+  // 年を年代でグルーピングし、年代見出しで開閉する縦ナビ（新しい年代・年が上）。
+  const byDec = {};
+  for (const y of years) (byDec[decadeOf(y)] = byDec[decadeOf(y)] || []).push(y);
+  const decs = Object.keys(byDec).map(Number).sort((a, b) => b - a);
+  if (!railFoldInit && decs.length) {   // 初期表示は最新年代のみ開き、他は畳む
+    decs.slice(1).forEach(d => railFoldedDecades.add(d));
+    railFoldInit = true;
+  }
+  return decs.map(d => {
+    const folded = railFoldedDecades.has(d);
+    const yrs = byDec[d].slice().sort((a, b) => b - a);
+    const btns = yrs.map(y =>
+      `<button class="ytab ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`
+    ).join("");
+    return `<div class="rail-dec ${folded ? "folded" : ""}" id="raildec-${d}">
+      <button class="rail-dec-head" onclick="toggleRailDec(${d})"><span class="rail-dec-tog">${folded ? "▶" : "▼"}</span>${d}年代</button>
+      <div class="rail-dec-years">${btns}</div>
+    </div>`;
+  }).join("");
+}
+function toggleRailDec(d) {
+  if (railFoldedDecades.has(d)) railFoldedDecades.delete(d); else railFoldedDecades.add(d);
+  renderYearbar();
 }
 function renderYearbar() {
   const html = yearbarHtml();
