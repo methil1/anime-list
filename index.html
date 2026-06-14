@@ -433,6 +433,7 @@ let showScores = false;   // 評価値（★）の表示。デフォルト非表
 let collapsedDecades = new Set(); // 折りたたみ中の年代（collection モード用、キー=10年区切りの開始年）
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
 let collapsedCours = new Set();   // 折りたたみ中のクール（キー=`${year}-${season}`）
+let courTouched = new Set();      // ユーザーが手動開閉したクール（既定折りたたみより優先）
 let railFoldedDecades = new Set(); // 左レール年ナビで畳んでいる年代（最新年代以外を初期で畳む）
 let railFoldInit = false;
 
@@ -686,6 +687,7 @@ function toggleYear(y) {
   if (collapsed && view.mode === "collection") maybeAutoFoldDecade(decadeOf(y));
 }
 function toggleCour(key) {
+  courTouched.add(key);
   const block = document.getElementById(`cour-${key}`);
   if (!block) return;
   const collapsed = !collapsedCours.has(key);
@@ -1089,10 +1091,21 @@ function seasonGroupsHtml(items, year, prefix = "") {
   return seasons.map(s => {
     // OVA/劇場は年別カテゴライズなので評価値順だと分かりづらい → 発売/公開日(d)順に並べる。
     // クール(冬春夏秋)は従来どおり評価値の高い順。日付欠落は末尾、同日は評価値順。
-    const isYearly = s === "OVA" || s === "MOVIE";
-    const base = bySeason[s].slice().sort(isYearly
-      ? (a, b) => (a.d || Infinity) - (b.d || Infinity) || (b.sc || 0) - (a.sc || 0)
-      : (a, b) => (b.sc || 0) - (a.sc || 0));
+    const hasFullDate = a => a.d && a.d % 100 !== 0 && Math.floor(a.d / 100) % 100 !== 0;
+    const base = bySeason[s].slice();
+    if (s === "MOVIE") {
+      // 公開日(YYYY/MM/DD)が判明している作品を古い順、年のみ(例:2026年)の作品はその後にタイトル昇順。
+      base.sort((a, b) => {
+        const fa = hasFullDate(a), fb = hasFullDate(b);
+        if (fa && fb) return a.d - b.d || (b.sc || 0) - (a.sc || 0);
+        if (fa !== fb) return fa ? -1 : 1;
+        return (a.t || "").localeCompare(b.t || "", "ja");
+      });
+    } else if (s === "OVA") {
+      base.sort((a, b) => (a.d || Infinity) - (b.d || Infinity) || (b.sc || 0) - (a.sc || 0));
+    } else {
+      base.sort((a, b) => (b.sc || 0) - (a.sc || 0));
+    }
     // 現クールには継続作品を開始クール作品の後ろに評価値順で追加する。
     const isCurrentCour = view.mode === "year" && !query && year === cc.year && s === cc.season;
     const cont = isCurrentCour
@@ -1105,6 +1118,11 @@ function seasonGroupsHtml(items, year, prefix = "") {
     const isCour = ["WINTER", "SPRING", "SUMMER", "FALL"].includes(s);
     const label = isCour ? `${year}年 ${SEASON_JA[s] || s}クール` : `${year}年 ${SEASON_JA[s] || s}`;
     const courKey = `${prefix}${year}-${s}`;
+    // 現在年ページでは現行クールより前のクールを既定で折りたたむ（ユーザー操作があればそれを優先）。
+    if (view.mode === "year" && !query && isCour && !courTouched.has(courKey)
+        && year === CURRENT_YEAR && SEASON_ORDER[s] < SEASON_ORDER[cc.season]) {
+      collapsedCours.add(courKey);
+    }
     const courCollapsed = collapsedCours.has(courKey);
     return `<section class="cour ${courCollapsed ? "collapsed" : ""}" id="cour-${courKey}">
       <div class="cour-head ${SEASON_CLS[s] || ""}" onclick="toggleCour('${courKey}')">
