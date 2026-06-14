@@ -41,7 +41,8 @@
 
   /* Header */
   header { padding: 40px 0 18px; }
-  .title-row { display: flex; align-items: flex-end; justify-content: space-between; gap: 18px; flex-wrap: wrap; }
+  .title-row { display: flex; align-items: flex-start; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
+  .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; }
   h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
@@ -58,6 +59,38 @@
   .stat.planning .num { color: var(--planning); }
   .collection-bar { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   body.hide-scores .poster .score { display: none; }
+
+  /* 右上コンテキストパネル（通常=今週の放送表 / コレクション=視聴の傾向） */
+  .context-panel { flex: 1 1 520px; min-width: 300px; max-width: none; align-self: stretch;
+    background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm); padding: 12px 14px; }
+  .context-panel:empty { display: none; padding: 0; border: 0; }
+  .cp-title { display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+    font-size: 0.82rem; font-weight: 700; color: var(--text-dim); margin-bottom: 9px; }
+  .cp-tabs { display: flex; gap: 5px; }
+  .cp-tab { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-faint);
+    padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; cursor: pointer; font-family: inherit; transition: all .12s; }
+  .cp-tab:hover { color: var(--text); border-color: var(--border-strong); }
+  .cp-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  /* 週間放送表 */
+  .sched { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-height: 420px; overflow-y: auto; }
+  .sched::-webkit-scrollbar { width: 6px; }
+  .sched::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+  .sched-day { min-width: 0; }
+  .sched-day-h { font-size: 0.72rem; font-weight: 700; color: var(--text-faint); text-align: center;
+    padding-bottom: 4px; border-bottom: 1px solid var(--border); margin-bottom: 5px; }
+  .sched-item { display: flex; gap: 6px; align-items: baseline; padding: 2px 4px; border-radius: 6px; cursor: pointer; line-height: 1.3; }
+  .sched-item:hover { background: var(--bg-elev); }
+  .sched-item .t { flex: 0 0 auto; font-size: 0.62rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; }
+  .sched-item .n { flex: 1 1 auto; min-width: 0; font-size: 0.66rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .sched-empty { color: var(--text-faint); font-size: 0.72rem; text-align: center; }
+  /* 視聴の傾向バー */
+  .cp-bars { display: grid; gap: 7px; }
+  .cp-bar { display: grid; grid-template-columns: 5.2em 1fr 2em; gap: 9px; align-items: center; font-size: 0.78rem; }
+  .cp-bar .k { color: var(--text-dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .cp-bar .track { height: 8px; background: var(--bg-elev); border-radius: 999px; overflow: hidden; }
+  .cp-bar .fill { height: 100%; background: linear-gradient(90deg, var(--accent-soft), var(--accent)); border-radius: 999px; }
+  .cp-bar .v { color: var(--text-faint); text-align: right; font-variant-numeric: tabular-nums; }
+  @media (max-width: 820px) { .context-panel { display: none; } }
 
   /* Toolbar */
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 26px; }
@@ -246,11 +279,12 @@
 <div class="wrap">
   <header>
     <div class="title-row">
-      <div>
+      <div class="title-block">
         <h1>アニメ<span class="accent">視聴備忘録</span></h1>
         <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
         <p class="src-note" id="src-note"></p>
       </div>
+      <div class="context-panel" id="context-panel"></div>
     </div>
     <div class="stats" id="stats"></div>
   </header>
@@ -698,9 +732,115 @@ function renderStats() {
     <div class="stat"><span class="num">${catalog.length.toLocaleString()}</span><span class="lbl">カタログ作品</span></div>`;
 }
 
+/* ---------- 右上コンテキストパネル ---------- */
+let panelStat = "genre";   // 視聴の傾向パネルの表示軸: "genre" | "decade"
+
+// クール作品の毎週の放送枠を {day(0=日), mins(0時からの分), time("HH:MM")} で返す。
+// air(第1話airingAt, unix秒UTC)優先＝JST固定(+9h)。無ければ bc=[曜日, "HH:MM"]。どちらも無ければ null。
+function airSlot(a) {
+  if (a.air) {
+    const j = new Date(a.air * 1000 + 9 * 3600 * 1000);
+    const h = j.getUTCHours(), m = j.getUTCMinutes();
+    return { day: j.getUTCDay(), mins: h * 60 + m, time: `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}` };
+  }
+  if (Array.isArray(a.bc) && a.bc.length) {
+    const t = a.bc[1] || "";
+    const mt = /^(\d{1,2}):(\d{2})$/.exec(t);
+    return { day: a.bc[0], mins: mt ? (+mt[1] * 60 + +mt[2]) : 1e9, time: t || "--:--" };
+  }
+  return null;
+}
+// 現クール放送中の作品（開始クール作品＋別クール開始の継続作品）を重複排除して返す。
+function currentlyAiring() {
+  const cc = currentCour();
+  const seen = new Map();
+  for (const a of catalog) if ((a.f === "TV" || a.f === "SHORT") && a.y === cc.year && a.s === cc.season) seen.set(a.id, a);
+  for (const a of continuingInCour(cc)) seen.set(a.id, a);
+  return [...seen.values()];
+}
+// 通常時パネル: 今週の放送表（横=曜日 月→日 / 縦=放送時刻順）。
+function schedulePanelHtml() {
+  const cc = currentCour();
+  const ccLabel = `${cc.year}年 ${SEASON_JA[cc.season]}クール`;
+  const shows = currentlyAiring();
+  const slots = [];
+  let undated = 0;
+  const DAY_HIDE_FROM = 5 * 60, DAY_HIDE_TO = 15 * 60;   // 5:00〜15:00 の昼間アニメはカレンダーに表示しない
+  for (const a of shows) {
+    const s = airSlot(a);
+    if (!s) { undated++; continue; }
+    if (s.mins >= DAY_HIDE_FROM && s.mins < DAY_HIDE_TO) continue;
+    slots.push({ a, ...s });
+  }
+  const head = `<div class="cp-title"><span>📺 今週の放送 <span style="color:var(--text-faint);font-weight:600">${ccLabel}</span></span></div>`;
+  if (!shows.length) return `${head}<div class="sched-empty">現クールの放送情報がありません。</div>`;
+  const dayOrder = [0, 1, 2, 3, 4, 5, 6];   // 日月火水木金土（日曜始まり）
+  const cols = dayOrder.map(d => {
+    const items = slots.filter(s => s.day === d).sort((x, y) => x.mins - y.mins);
+    const rows = items.map(s => `<div class="sched-item" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()" onclick="cycle(${s.a.id})"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("") || `<div class="sched-empty">—</div>`;
+    return `<div class="sched-day"><div class="sched-day-h">${WEEKDAY_JA[d]}</div>${rows}</div>`;
+  }).join("");
+  return `${head}<div class="sched">${cols}</div>${undated ? `<div class="sched-empty" style="margin-top:7px">放送枠不明 ${undated}本</div>` : ""}`;
+}
+// コレクション時パネル: 視聴済の傾向（ジャンル別 / 年代別の本数バー、切替式）。
+function barHtml(k, v, max) {
+  const pct = max ? Math.round(v / max * 100) : 0;
+  return `<div class="cp-bar"><span class="k">${esc(k)}</span><span class="track"><span class="fill" style="width:${pct}%"></span></span><span class="v">${v}</span></div>`;
+}
+function statsPanelHtml() {
+  const watched = catalog.filter(a => ["done", "maybe", "watching"].includes(statusOf(a.id)));
+  const tabs = `<div class="cp-tabs">
+    <button class="cp-tab ${panelStat === "genre" ? "active" : ""}" onclick="setPanelStat('genre')">ジャンル</button>
+    <button class="cp-tab ${panelStat === "decade" ? "active" : ""}" onclick="setPanelStat('decade')">年代</button>
+    <button class="cp-tab ${panelStat === "studio" ? "active" : ""}" onclick="setPanelStat('studio')">製作会社</button>
+    <button class="cp-tab ${panelStat === "rating" ? "active" : ""}" onclick="setPanelStat('rating')">評価</button>
+  </div>`;
+  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
+  if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
+  let bars;
+  if (panelStat === "genre") {
+    const cnt = {};
+    for (const a of watched) for (const g of (a.g || [])) cnt[g] = (cnt[g] || 0) + 1;
+    const top = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 8);
+    const max = top.length ? top[0][1] : 1;
+    bars = top.length ? top.map(([k, v]) => barHtml(k, v, max)).join("") : `<div class="sched-empty">ジャンル情報がありません。</div>`;
+  } else if (panelStat === "studio") {
+    const cnt = {};
+    for (const a of watched) for (const st of (a.st ? a.st.split("・") : [])) { const s = st.trim(); if (s) cnt[s] = (cnt[s] || 0) + 1; }
+    const top = Object.entries(cnt).sort((x, y) => y[1] - x[1]).slice(0, 8);
+    const max = top.length ? top[0][1] : 1;
+    bars = top.length ? top.map(([k, v]) => barHtml(k, v, max)).join("") : `<div class="sched-empty">製作会社情報がありません。</div>`;
+  } else if (panelStat === "rating") {
+    const cnt = {};
+    let total = 0;
+    for (const a of watched) { const r = ratingOf(a.id); if (r > 0) { cnt[r] = (cnt[r] || 0) + 1; total++; } }
+    if (!total) return `${head}<div class="sched-empty">評価を付けた作品がまだありません。</div>`;
+    const max = Math.max(...Object.values(cnt));
+    bars = [5, 4, 3, 2, 1].map(r => barHtml("★".repeat(r), cnt[r] || 0, max)).join("");
+  } else {
+    const cnt = {};
+    for (const a of watched) { const d = Math.floor(a.y / 10) * 10; cnt[d] = (cnt[d] || 0) + 1; }
+    const ks = Object.keys(cnt).map(Number).sort((a, b) => b - a);
+    const max = Math.max(...ks.map(d => cnt[d]));
+    bars = ks.map(d => barHtml(`${d}年代`, cnt[d], max)).join("");
+  }
+  return `${head}<div class="cp-bars">${bars}</div>`;
+}
+function setPanelStat(s) { panelStat = s; renderContextPanel(); }
+// ビューに応じてパネルの中身を切替。年別=放送表 / コレクション=傾向 / 新着・検索中=非表示。
+function renderContextPanel() {
+  const el = document.getElementById("context-panel");
+  if (!el) return;
+  if (query) { el.innerHTML = ""; return; }
+  if (view.mode === "collection") el.innerHTML = statsPanelHtml();
+  else if (view.mode === "year") el.innerHTML = schedulePanelHtml();
+  else el.innerHTML = "";
+}
+
 /* ---------- main render ---------- */
 function render() {
   renderStats();
+  renderContextPanel();
   const list = document.getElementById("list");
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
