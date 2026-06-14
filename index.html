@@ -703,6 +703,21 @@ function toggleYear(y) {
   setYearCollapsed(y, collapsed);
   if (collapsed && view.mode === "collection") maybeAutoFoldDecade(decadeOf(y));
 }
+// 自己評価ページ: 星グループ内の全年代が畳まれたら大カテゴリ(星)も自動で畳む。
+function maybeAutoFoldRating(decKey) {
+  const r = decKey.split("-")[1];                 // "ratedec-{r}-{d}" → r
+  const rateKey = `rate-${r}`;
+  const block = document.getElementById(`cour-${rateKey}`);
+  if (!block || collapsedCours.has(rateKey)) return;
+  const decs = block.querySelectorAll(".rate-decade");
+  if (decs.length === 0) return;
+  if (Array.from(decs).every(d => d.classList.contains("collapsed"))) {
+    collapsedCours.add(rateKey);
+    block.classList.add("collapsed");
+    const t = block.querySelector(".cour-head .cour-head-toggle");
+    if (t) t.textContent = "▶";
+  }
+}
 function toggleCour(key) {
   courTouched.add(key);
   const block = document.getElementById(`cour-${key}`);
@@ -713,6 +728,7 @@ function toggleCour(key) {
   const toggle = block.querySelector(".cour-head-toggle");
   if (toggle) toggle.textContent = collapsed ? "▶" : "▼";
   if (collapsed && view.mode === "collection") maybeAutoFoldYear(Number(key.split("-")[0]));
+  if (collapsed && key.startsWith("ratedec-")) maybeAutoFoldRating(key);
 }
 function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
