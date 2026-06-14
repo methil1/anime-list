@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>アニメ視聴備忘録</title>
+<title>アニメモ！</title>
 <style>
   :root {
     --bg: #0d0e12;
@@ -374,7 +374,7 @@
     <header>
       <div class="title-row">
         <div class="title-block">
-          <h1>アニメ<span class="accent">視聴備忘録</span></h1>
+          <h1>アニメモ！</h1>
           <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
           <p class="src-note" id="src-note"></p>
           <div class="stats" id="stats"></div>
@@ -1106,12 +1106,12 @@ function seasonGroupsHtml(items, year, prefix = "") {
     } else {
       base.sort((a, b) => (b.sc || 0) - (a.sc || 0));
     }
-    // 現クールには継続作品を開始クール作品の後ろに評価値順で追加する。
+    // 現クールには継続作品を混ぜ、開始作品と合わせてクール全体を評価値順で表示する。
     const isCurrentCour = view.mode === "year" && !query && year === cc.year && s === cc.season;
-    const cont = isCurrentCour
-      ? continuing.slice().sort((a, b) => (b.sc || 0) - (a.sc || 0))
-      : [];
-    const arr = base.concat(cont);
+    const cont = isCurrentCour ? continuing.slice() : [];
+    const arr = cont.length
+      ? base.concat(cont).sort((a, b) => (b.sc || 0) - (a.sc || 0))
+      : base;
     const shortCount = base.filter(a => a.f === "SHORT").length;
     let countText = shortCount ? `${base.length}作品（内ショート${shortCount}作品）` : `${base.length}作品`;
     if (cont.length) countText += `＋継続${cont.length}作品`;
