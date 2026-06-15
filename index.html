@@ -299,6 +299,10 @@
   .reco-banner b { color: var(--text); }
   .reco-sum { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.84rem; }
   .reco-sum-axis .k { color: var(--text-faint); margin-right: 4px; font-size: 0.78rem; }
+  .reco-toggle { margin-left: 10px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text-dim); font-size: 0.8rem; cursor: pointer; }
+  .reco-toggle:hover, .reco-toggle.active { border-color: var(--accent-soft); color: var(--text); }
+  .reco-sub { margin-top: 6px; font-size: 0.8rem; color: var(--text-faint); }
+  .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
 
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
   .foot-note a { color: var(--text-dim); cursor: pointer; text-decoration: underline; }
@@ -488,17 +492,20 @@ function saveWatch() {
 function statusOf(id) { return (watch[id] && watch[id].s) || "unwatched"; }
 function epOf(id) { return (watch[id] && watch[id].ep) || 0; }
 function ratingOf(id) { return (watch[id] && watch[id].r) || 0; }
+// おすすめ除外フラグ（「興味なし／見る予定なし」）。視聴状態・評価とは独立に持つ。
+function isHidden(id) { return !!(watch[id] && watch[id].x); }
 
 // 状態を設定。unwatched は状態を消すが自分評価は保持する。
 function setStatus(id, status, ep) {
   const cur = watch[id] || {};
   const e = {};
   if (cur.r > 0) e.r = cur.r;
+  if (cur.x) e.x = cur.x;   // おすすめ除外フラグは状態変更でも維持
   if (status && status !== "unwatched") {
     e.s = status;
     if ((status === "watching" || status === "dropped") && ep > 0) e.ep = ep;
   }
-  if (e.s || e.r) watch[id] = e; else delete watch[id];
+  if (e.s || e.r || e.x) watch[id] = e; else delete watch[id];
   saveWatch();
   renderContextPanel();   // 傾向グラフを最新の視聴状態で更新
 }
@@ -515,9 +522,16 @@ function setEp(id, val) {
 function setRating(id, r) {
   const cur = watch[id] || {};
   if (r > 0) cur.r = r; else delete cur.r;
-  if (cur.s || cur.r) watch[id] = cur; else delete watch[id];
+  if (cur.s || cur.r || cur.x) watch[id] = cur; else delete watch[id];
   saveWatch();
   renderContextPanel();   // 評価タブの傾向グラフを更新
+}
+// おすすめ除外フラグのトグル（視聴状態・評価は保持）。再描画は呼び出し側に任せる。
+function toggleHidden(id) {
+  const cur = watch[id] || {};
+  if (cur.x) delete cur.x; else cur.x = 1;
+  if (cur.s || cur.r || cur.x) watch[id] = cur; else delete watch[id];
+  saveWatch();
 }
 
 /* ---------- helpers ---------- */
@@ -663,7 +677,7 @@ function renderYearbar() {
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goRatingSort() { view = { mode: "collection", year: null }; collectionSort = "rating"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function goReco() { view = { mode: "reco", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 const decadeOf = y => Math.floor(y / 10) * 10;
 
 // 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
@@ -1160,6 +1174,7 @@ const RECO_STATUS_W = { done: 1.0, maybe: 1.0, watching: 0.0, dropped: -1.0 };  
 const RECO_QUALITY_W = 0.5;   // AniList sc(0-100) の品質プライア係数（同点崩し＋良作浮上）
 const RECO_MIN_SEED = 5;      // 履歴がこれ未満ならコールドスタート（高評価作フォールバック）
 const RECO_LIMIT = 60;        // 表示件数
+let recoShowHidden = false;   // おすすめページで「興味なし一覧」を表示中か
 
 // 1作品の嗜好重み。評価優先、無ければ状態。0 は寄与なし。
 function recoSeedWeight(a) {
@@ -1175,7 +1190,7 @@ function buildTasteProfile() {
   let seeds = 0;
   const add = (ax, label, w) => { if (!label) return; sum[ax][label] = (sum[ax][label] || 0) + w; cnt[ax][label] = (cnt[ax][label] || 0) + 1; };
   for (const a of catalog) {
-    if (statusOf(a.id) === "unwatched") continue;   // 履歴のある作品だけが種
+    if (statusOf(a.id) === "unwatched" || isHidden(a.id)) continue;   // 未視聴／興味なしは種にしない
     seeds++;
     const w = recoSeedWeight(a);
     if (w === 0) continue;                            // ★1 / 視聴中(無評価) 等は種数に数えるがプロファイルには寄与しない
@@ -1199,14 +1214,27 @@ function recoScore(a, aff) {
   return s;
 }
 function renderReco(list) {
+  const hiddenItems = catalog.filter(a => isHidden(a.id));
+  const hideToggle = `<button class="reco-toggle ${recoShowHidden ? "active" : ""}" onclick="toggleRecoHidden()">${recoShowHidden ? "← おすすめに戻る" : `🚫 興味なし ${hiddenItems.length}件`}</button>`;
+
+  // 「興味なし一覧」表示モード（おすすめページ内のみ。右クリックで解除できる）。
+  if (recoShowHidden) {
+    const banner = `<div class="reco-banner"><b>🚫 興味なし（おすすめ非表示）</b> ${hiddenItems.length}件 ${hideToggle}<div class="reco-sub">作品を右クリック →「✅ おすすめに表示する」で解除できます。</div></div>`;
+    list.innerHTML = hiddenItems.length
+      ? banner + `<div class="grid">${hiddenItems.map(a => posterHtml(a)).join("")}</div>`
+      : `${banner}<div class="notice"><div class="big">🚫</div><p>「興味なし」にした作品はありません。</p></div>`;
+    return;
+  }
+
   const { aff, seeds } = buildTasteProfile();
-  // 候補は「未視聴」のみ。状態フィルタは無意味なので形式フィルタのみ尊重。
-  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && formatFilter.has(a.f));
+  // 候補は「未視聴かつ興味なしでない」のみ。状態フィルタは無意味なので形式フィルタのみ尊重。
+  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && formatFilter.has(a.f));
   const hasProfile = ["g", "src", "st", "au"].some(ax => Object.keys(aff[ax]).length);
+  const toggleBit = hiddenItems.length ? " " + hideToggle : "";
 
   if (seeds < RECO_MIN_SEED || !hasProfile) {   // コールドスタート: AniList高評価の未視聴作
     const top = candidates.filter(a => a.sc).sort((x, y) => (y.sc || 0) - (x.sc || 0)).slice(0, RECO_LIMIT);
-    const note = `<div class="reco-banner"><b>おすすめの精度を上げるには</b> 作品を視聴済みにしたり★評価を付けると、好みに合わせた提案になります。今はまず海外で高評価の作品を表示しています。</div>`;
+    const note = `<div class="reco-banner"><b>おすすめの精度を上げるには</b> 作品を視聴済みにしたり★評価を付けると、好みに合わせた提案になります。今はまず海外で高評価の作品を表示しています。${toggleBit}</div>`;
     list.innerHTML = top.length
       ? note + `<div class="grid">${top.map(a => posterHtml(a)).join("")}</div>`
       : `<div class="notice"><div class="big">✨</div><p>おすすめできる未視聴作品がありません。形式フィルタを確認してください。</p></div>`;
@@ -1215,16 +1243,17 @@ function renderReco(list) {
 
   const scored = candidates.map(a => [a, recoScore(a, aff)]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, RECO_LIMIT);
   if (!scored.length) {
-    list.innerHTML = `<div class="notice"><div class="big">✨</div><p>条件に合うおすすめが見つかりませんでした。形式フィルタを広げてみてください。</p></div>`;
+    list.innerHTML = `<div class="reco-banner"><b>✨ おすすめ</b>${toggleBit}</div><div class="notice"><div class="big">✨</div><p>条件に合うおすすめが見つかりませんでした。形式フィルタを広げてみてください。</p></div>`;
     return;
   }
   const topLabels = ax => Object.entries(aff[ax]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, 3).map(e => e[0]);
   const sumBits = [["ジャンル", topLabels("g")], ["原作", topLabels("src")], ["制作会社", topLabels("st")]]
     .filter(b => b[1].length)
     .map(b => `<span class="reco-sum-axis"><span class="k">${b[0]}</span>${b[1].map(esc).join(" / ")}</span>`).join("");
-  const banner = `<div class="reco-banner"><b>✨ あなたの好みに近い未視聴作品</b>${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
+  const banner = `<div class="reco-banner"><b>✨ あなたの好みに近い未視聴作品</b>${toggleBit}${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
   list.innerHTML = banner + `<div class="grid">${scored.map(([a]) => posterHtml(a)).join("")}</div>`;
 }
+function toggleRecoHidden() { recoShowHidden = !recoShowHidden; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function seasonGroupsHtml(items, year, prefix = "") {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
@@ -1376,6 +1405,7 @@ function ctxInner(a) {
     <div class="ctx-seclabel">視聴状態の変更</div>
     <div class="ctx-states">${states}</div>
     ${epRow}
+    <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? "✅ おすすめに表示する" : "🚫 おすすめに出さない"}</div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
     ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
@@ -1416,6 +1446,13 @@ function pickStatus(id, status) {
   setStatus(id, status, epOf(id));
   renderStats(); updatePoster(id); rebuildCtx(id);
   toast(STATUS_JA[status] + " にしました");
+}
+function pickHidden(id) {
+  toggleHidden(id);
+  const nowHidden = isHidden(id);
+  updatePoster(id); rebuildCtx(id);
+  if (view.mode === "reco") render();   // おすすめ一覧／興味なし一覧に即時反映
+  toast(nowHidden ? "おすすめに出さない にしました" : "おすすめに戻しました");
 }
 function pickRating(id, n) {
   setRating(id, ratingOf(id) === n ? 0 : n);
