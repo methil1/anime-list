@@ -303,7 +303,11 @@
   .reco-toggle:hover, .reco-toggle.active { border-color: var(--accent-soft); color: var(--text); }
   .reco-sub { margin-top: 6px; font-size: 0.8rem; color: var(--text-faint); }
   .collection-sort { margin: 2px 0 18px; }
+  .series-block { margin: 0 0 26px; }
+  .series-head { font-size: 1.02rem; font-weight: 700; color: var(--text); margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--accent-soft); }
+  .series-count { font-size: 0.8rem; font-weight: 600; color: var(--text-faint); margin-left: 8px; }
   .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
+  .ctx-menu .ctx-item.on { color: var(--accent-soft); }
 
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
   .foot-note a { color: var(--text-dim); cursor: pointer; text-decoration: underline; }
@@ -358,6 +362,7 @@
     <nav class="rail-views">
       <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
       <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
+      <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
     </nav>
 
     <div class="rail-group">
@@ -426,6 +431,7 @@
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
+const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
@@ -448,7 +454,8 @@ const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 let catalog = [];
 let years = [];
 let watch = loadWatch();
-let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco"
+let series = loadSeries();   // シリーズ単位の「見たい」/「興味なし」 { want:{key:1}, hide:{key:-2} }
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
@@ -532,6 +539,41 @@ function toggleHidden(id) {
   if (cur.x) delete cur.x; else cur.x = 1;
   if (cur.s || cur.r || cur.x) watch[id] = cur; else delete watch[id];
   saveWatch();
+}
+
+/* ---------- シリーズ単位の「見たい」/「興味なし」 ----------
+   シリーズ = 同一ベースタイトル（seriesKey）。作品単位の x フラグ(isHidden)とは独立に併存する。
+   want: そのシリーズを「見たいリスト」に入れる（専用ビューで表示・おすすめ候補からは除外）。
+   hide: そのシリーズを丸ごと興味なし（おすすめ候補・好みプロファイルの種から除外）。
+   ※ SERIES_KEY は WATCH_KEY 隣で定義（loadSeries が初期化時に参照するため TDZ 回避）。 */
+function loadSeries() {
+  try {
+    const r = localStorage.getItem(SERIES_KEY);
+    if (r) { const o = JSON.parse(r); return { want: o.want || {}, hide: o.hide || {} }; }
+  } catch (e) { console.error(e); }
+  return { want: {}, hide: {} };
+}
+function saveSeries() {
+  try { localStorage.setItem(SERIES_KEY, JSON.stringify(series)); }
+  catch (e) { alert("保存に失敗: " + e.message); }
+}
+// 同一ベースタイトルのキー（続編表記を除去＋表記ゆれ正規化）。_sk と同様に遅延キャッシュ。
+function seriesKey(a) {
+  if (a._series === undefined) a._series = kanaFold(primeBaseTitle(a.t));
+  return a._series;
+}
+function isSeriesWanted(a) { return !!series.want[seriesKey(a)]; }
+function isSeriesHidden(a) { return !!series.hide[seriesKey(a)]; }
+// 再描画は呼び出し側に任せる（toggleHidden と同方針）。
+function toggleSeriesWant(a) {
+  const k = seriesKey(a);
+  if (series.want[k]) delete series.want[k]; else series.want[k] = 1;
+  saveSeries();
+}
+function toggleSeriesHide(a) {
+  const k = seriesKey(a);
+  if (series.hide[k]) delete series.hide[k]; else series.hide[k] = -2;
+  saveSeries();
 }
 
 /* ---------- helpers ---------- */
@@ -671,6 +713,8 @@ function renderYearbar() {
   if (rb) { rb.style.display = view.mode === "year" ? "" : "none"; rb.classList.toggle("active", view.mode === "recent"); }
   const rcb = document.getElementById("reco-btn");
   if (rcb) rcb.classList.toggle("active", view.mode === "reco");
+  const sb = document.getElementById("series-btn");
+  if (sb) sb.classList.toggle("active", view.mode === "series");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -681,6 +725,7 @@ function collectionSortBar() {
   return `<div class="cp-tabs collection-sort">${t("season", "クール別")}${t("rating", "自己評価順")}</div>`;
 }
 function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goSeries() { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 const decadeOf = y => Math.floor(y / 10) * 10;
 
 // 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
@@ -1005,6 +1050,7 @@ function render() {
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
   if (view.mode === "reco" && !query) { renderReco(list); return; }
+  if (view.mode === "series" && !query) { renderSeriesWant(list); return; }
   if (view.mode === "collection" && collectionSort === "rating" && !query) { renderCollectionByRating(list); return; }
 
   let items;
@@ -1194,7 +1240,7 @@ function buildTasteProfile() {
   let seeds = 0;
   const add = (ax, label, w) => { if (!label) return; sum[ax][label] = (sum[ax][label] || 0) + w; cnt[ax][label] = (cnt[ax][label] || 0) + 1; };
   for (const a of catalog) {
-    if (statusOf(a.id) === "unwatched" || isHidden(a.id)) continue;   // 未視聴／興味なしは種にしない
+    if (statusOf(a.id) === "unwatched" || isHidden(a.id) || isSeriesHidden(a)) continue;   // 未視聴／興味なし（作品・シリーズ）は種にしない
     seeds++;
     const w = recoSeedWeight(a);
     if (w === 0) continue;                            // ★1 / 視聴中(無評価) 等は種数に数えるがプロファイルには寄与しない
@@ -1232,7 +1278,8 @@ function renderReco(list) {
 
   const { aff, seeds } = buildTasteProfile();
   // 候補は「未視聴かつ興味なしでない」のみ。状態フィルタは無意味なので形式フィルタのみ尊重。
-  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && formatFilter.has(a.f));
+  // シリーズごと興味なし(hide)は除外。シリーズ「見たい」(want)は視聴決定済みなのでおすすめ候補から外す。
+  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && !isSeriesHidden(a) && !isSeriesWanted(a) && formatFilter.has(a.f));
   const hasProfile = ["g", "src", "st", "au"].some(ax => Object.keys(aff[ax]).length);
   const toggleBit = hiddenItems.length ? " " + hideToggle : "";
 
@@ -1258,6 +1305,30 @@ function renderReco(list) {
   list.innerHTML = banner + `<div class="grid">${scored.map(([a]) => posterHtml(a)).join("")}</div>`;
 }
 function toggleRecoHidden() { recoShowHidden = !recoShowHidden; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+
+// 「見たいシリーズ」専用ビュー。want 登録シリーズの全話をシリーズ単位でまとめて表示する。
+// 形式フィルタは尊重、状態フィルタは無視（おすすめと同方針）。
+function renderSeriesWant(list) {
+  const items = catalog.filter(a => isSeriesWanted(a) && formatFilter.has(a.f));
+  if (!items.length) {
+    list.innerHTML = `<div class="notice"><div class="big">📺</div><p>「見たいシリーズ」はまだありません。<br>作品を右クリック →「📺 シリーズを見たいリストに追加」で登録できます。</p></div>`;
+    return;
+  }
+  // シリーズキーでグルーピング。各シリーズ内は年・公開順（y→d）で並べる。
+  const byKey = {};
+  for (const a of items) (byKey[seriesKey(a)] = byKey[seriesKey(a)] || []).push(a);
+  const keys = Object.keys(byKey).sort((k1, k2) => k1.localeCompare(k2, "ja"));
+  const blocks = keys.map(k => {
+    const arr = byKey[k].sort((a, b) => (a.y || 0) - (b.y || 0) || (a.d || 0) - (b.d || 0));
+    const heading = primeBaseTitle(arr[0].t) || arr[0].t;
+    return `<div class="series-block">
+      <div class="series-head">📺 ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
+      <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
+    </div>`;
+  }).join("");
+  const banner = `<div class="reco-banner"><b>📺 見たいシリーズ</b> ${keys.length}シリーズ・${items.length}作品<div class="reco-sub">作品を右クリック →「✅ シリーズを見たいリストから解除」で外せます。</div></div>`;
+  list.innerHTML = banner + blocks;
+}
 function seasonGroupsHtml(items, year, prefix = "") {
   const bySeason = {};
   for (const a of items) (bySeason[a.s] = bySeason[a.s] || []).push(a);
@@ -1410,6 +1481,8 @@ function ctxInner(a) {
     <div class="ctx-states">${states}</div>
     ${epRow}
     <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? "✅ おすすめに表示する" : "🚫 おすすめに出さない"}</div>
+    <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? "✅ シリーズを見たいリストから解除" : "📺 シリーズを見たいリストに追加"}</div>
+    <div class="ctx-item ctx-hide ${isSeriesHidden(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesHide(${id})">${isSeriesHidden(a) ? "✅ シリーズの興味なしを解除" : "🚫 シリーズごと興味なし"}</div>
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
     ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
@@ -1457,6 +1530,24 @@ function pickHidden(id) {
   updatePoster(id); rebuildCtx(id);
   if (view.mode === "reco") render();   // おすすめ一覧／興味なし一覧に即時反映
   toast(nowHidden ? "おすすめに出さない にしました" : "おすすめに戻しました");
+}
+// シリーズを「見たいリスト」に追加／解除。
+function pickSeriesWant(id) {
+  const a = catalog.find(x => x.id === id); if (!a) return;
+  toggleSeriesWant(a);
+  const now = isSeriesWanted(a);
+  rebuildCtx(id);
+  if (view.mode === "reco" || view.mode === "series") render();   // 見たいシリーズ／おすすめ候補に即時反映
+  toast(now ? "シリーズを見たいリストに追加しました" : "シリーズを見たいリストから外しました");
+}
+// シリーズごと興味なし（おすすめ・好み学習から除外）。
+function pickSeriesHide(id) {
+  const a = catalog.find(x => x.id === id); if (!a) return;
+  toggleSeriesHide(a);
+  const now = isSeriesHidden(a);
+  rebuildCtx(id);
+  if (view.mode === "reco" || view.mode === "series") render();
+  toast(now ? "シリーズごと興味なし にしました" : "シリーズの興味なしを解除しました");
 }
 function pickRating(id, n) {
   setRating(id, ratingOf(id) === n ? 0 : n);
