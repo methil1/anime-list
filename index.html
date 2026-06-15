@@ -295,6 +295,11 @@
   .notice .big { font-size: 2.6rem; margin-bottom: 10px; }
   .notice code { background: var(--bg-elev); padding: 2px 8px; border-radius: 6px; color: var(--accent-soft); }
 
+  .reco-banner { margin: 4px 0 18px; padding: 13px 16px; background: var(--bg-elev); border-left: 3px solid var(--accent-soft); border-radius: 8px; font-size: 0.9rem; color: var(--text-dim); }
+  .reco-banner b { color: var(--text); }
+  .reco-sum { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.84rem; }
+  .reco-sum-axis .k { color: var(--text-faint); margin-right: 4px; font-size: 0.78rem; }
+
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
   .foot-note a { color: var(--text-dim); cursor: pointer; text-decoration: underline; }
   .src-credit { margin-top: 18px; text-align: right; color: var(--text-faint); font-size: 0.72rem; }
@@ -348,6 +353,7 @@
     <nav class="rail-views">
       <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
       <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 自己評価順</button>
+      <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
     </nav>
 
     <div class="rail-group">
@@ -438,7 +444,7 @@ const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 let catalog = [];
 let years = [];
 let watch = loadWatch();
-let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent"
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
@@ -651,10 +657,13 @@ function renderYearbar() {
   if (ratb) ratb.classList.toggle("active", view.mode === "collection" && collectionSort === "rating");
   const rb = document.getElementById("recent-btn");
   if (rb) rb.classList.toggle("active", view.mode === "recent");
+  const rcb = document.getElementById("reco-btn");
+  if (rcb) rcb.classList.toggle("active", view.mode === "reco");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goRatingSort() { view = { mode: "collection", year: null }; collectionSort = "rating"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goReco() { view = { mode: "reco", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 const decadeOf = y => Math.floor(y / 10) * 10;
 
 // 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
@@ -977,6 +986,7 @@ function render() {
   const list = document.getElementById("list");
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
+  if (view.mode === "reco" && !query) { renderReco(list); return; }
   if (view.mode === "collection" && collectionSort === "rating" && !query) { renderCollectionByRating(list); return; }
 
   let items;
@@ -1140,6 +1150,80 @@ function renderRecent(list) {
     return;
   }
   list.innerHTML = recentGroupsHtml(items);   // 追加日（更新日）→年代→年→クールで階層表示
+}
+
+/* ---------- おすすめ（レコメンド） ----------
+   視聴履歴・自己評価から嗜好プロファイルを作り、未視聴作品をスコアリングして提案する。
+   完全クライアントサイド（localStorage の watch ＋ カタログのメタデータのみ。ML/バックエンド不要）。 */
+const RECO_RATING_W = { 5: 3.0, 4: 2.0, 3: 1.0, 2: 0.5, 1: 0.0 };   // 自己評価★→重み
+const RECO_STATUS_W = { done: 1.0, maybe: 1.0, watching: 0.0, dropped: -1.0 };   // 無評価時は状態で代替
+const RECO_QUALITY_W = 0.5;   // AniList sc(0-100) の品質プライア係数（同点崩し＋良作浮上）
+const RECO_MIN_SEED = 5;      // 履歴がこれ未満ならコールドスタート（高評価作フォールバック）
+const RECO_LIMIT = 60;        // 表示件数
+
+// 1作品の嗜好重み。評価優先、無ければ状態。0 は寄与なし。
+function recoSeedWeight(a) {
+  const r = ratingOf(a.id);
+  if (r > 0) return RECO_RATING_W[r] || 0;
+  return RECO_STATUS_W[statusOf(a.id)] || 0;
+}
+// 嗜好プロファイル: 各メタ軸ラベル → 平均重み（出現回数で正規化し1本の偏りを抑える）。
+function buildTasteProfile() {
+  const AX = ["g", "src", "st", "au"];
+  const sum = { g: {}, src: {}, st: {}, au: {} };
+  const cnt = { g: {}, src: {}, st: {}, au: {} };
+  let seeds = 0;
+  const add = (ax, label, w) => { if (!label) return; sum[ax][label] = (sum[ax][label] || 0) + w; cnt[ax][label] = (cnt[ax][label] || 0) + 1; };
+  for (const a of catalog) {
+    if (statusOf(a.id) === "unwatched") continue;   // 履歴のある作品だけが種
+    seeds++;
+    const w = recoSeedWeight(a);
+    if (w === 0) continue;                            // ★1 / 視聴中(無評価) 等は種数に数えるがプロファイルには寄与しない
+    for (const g of (a.g || [])) add("g", g, w);
+    add("src", a.src, w);
+    for (const st of (a.st ? a.st.split("・") : [])) add("st", st.trim(), w);
+    add("au", a.au, w);
+  }
+  const aff = { g: {}, src: {}, st: {}, au: {} };
+  for (const ax of AX) for (const k in sum[ax]) aff[ax][k] = sum[ax][k] / cnt[ax][k];
+  return { aff, seeds };
+}
+// 候補作品のスコア = Σ各軸affinity ＋ 品質プライア。
+function recoScore(a, aff) {
+  let s = 0;
+  for (const g of (a.g || [])) s += aff.g[g] || 0;
+  s += aff.src[a.src] || 0;
+  for (const st of (a.st ? a.st.split("・") : [])) s += aff.st[st.trim()] || 0;
+  s += aff.au[a.au] || 0;
+  s += (a.sc || 0) / 100 * RECO_QUALITY_W;
+  return s;
+}
+function renderReco(list) {
+  const { aff, seeds } = buildTasteProfile();
+  // 候補は「未視聴」のみ。状態フィルタは無意味なので形式フィルタのみ尊重。
+  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && formatFilter.has(a.f));
+  const hasProfile = ["g", "src", "st", "au"].some(ax => Object.keys(aff[ax]).length);
+
+  if (seeds < RECO_MIN_SEED || !hasProfile) {   // コールドスタート: AniList高評価の未視聴作
+    const top = candidates.filter(a => a.sc).sort((x, y) => (y.sc || 0) - (x.sc || 0)).slice(0, RECO_LIMIT);
+    const note = `<div class="reco-banner"><b>おすすめの精度を上げるには</b> 作品を視聴済みにしたり★評価を付けると、好みに合わせた提案になります。今はまず海外で高評価の作品を表示しています。</div>`;
+    list.innerHTML = top.length
+      ? note + `<div class="grid">${top.map(a => posterHtml(a)).join("")}</div>`
+      : `<div class="notice"><div class="big">✨</div><p>おすすめできる未視聴作品がありません。形式フィルタを確認してください。</p></div>`;
+    return;
+  }
+
+  const scored = candidates.map(a => [a, recoScore(a, aff)]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, RECO_LIMIT);
+  if (!scored.length) {
+    list.innerHTML = `<div class="notice"><div class="big">✨</div><p>条件に合うおすすめが見つかりませんでした。形式フィルタを広げてみてください。</p></div>`;
+    return;
+  }
+  const topLabels = ax => Object.entries(aff[ax]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, 3).map(e => e[0]);
+  const sumBits = [["ジャンル", topLabels("g")], ["原作", topLabels("src")], ["制作会社", topLabels("st")]]
+    .filter(b => b[1].length)
+    .map(b => `<span class="reco-sum-axis"><span class="k">${b[0]}</span>${b[1].map(esc).join(" / ")}</span>`).join("");
+  const banner = `<div class="reco-banner"><b>✨ あなたの好みに近い未視聴作品</b>${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
+  list.innerHTML = banner + `<div class="grid">${scored.map(([a]) => posterHtml(a)).join("")}</div>`;
 }
 function seasonGroupsHtml(items, year, prefix = "") {
   const bySeason = {};
