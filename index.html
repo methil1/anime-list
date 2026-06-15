@@ -302,6 +302,7 @@
   .reco-toggle { margin-left: 10px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--border-strong); background: var(--bg-elev); color: var(--text-dim); font-size: 0.8rem; cursor: pointer; }
   .reco-toggle:hover, .reco-toggle.active { border-color: var(--accent-soft); color: var(--text); }
   .reco-sub { margin-top: 6px; font-size: 0.8rem; color: var(--text-faint); }
+  .collection-sort { margin: 2px 0 18px; }
   .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
 
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
@@ -356,7 +357,6 @@
 
     <nav class="rail-views">
       <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
-      <button class="ytab collection" id="rating-btn" onclick="goRatingSort()">★ 自己評価順</button>
       <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
     </nav>
 
@@ -666,17 +666,20 @@ function renderYearbar() {
   const bottom = document.getElementById("yearbar-bottom");
   if (bottom) bottom.innerHTML = html;
   const cb = document.getElementById("collection-btn");
-  if (cb) cb.classList.toggle("active", view.mode === "collection" && collectionSort === "season");
-  const ratb = document.getElementById("rating-btn");
-  if (ratb) ratb.classList.toggle("active", view.mode === "collection" && collectionSort === "rating");
-  const rb = document.getElementById("recent-btn");
-  if (rb) rb.classList.toggle("active", view.mode === "recent");
+  if (cb) cb.classList.toggle("active", view.mode === "collection");
+  const rb = document.getElementById("recent-btn");   // 新着更新分は TOP（年別）表示時のみ出す
+  if (rb) { rb.style.display = view.mode === "year" ? "" : "none"; rb.classList.toggle("active", view.mode === "recent"); }
   const rcb = document.getElementById("reco-btn");
   if (rcb) rcb.classList.toggle("active", view.mode === "reco");
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function goRatingSort() { view = { mode: "collection", year: null }; collectionSort = "rating"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+// マイページ内の並び替え（クール別 / 自己評価順）。視聴済みリストは同一なので同じビュー内で切替。
+function setCollectionSort(s) { collectionSort = s; renderYearbar(); render(); }
+function collectionSortBar() {
+  const t = (s, label) => `<button class="cp-tab ${collectionSort === s ? "active" : ""}" onclick="setCollectionSort('${s}')">${label}</button>`;
+  return `<div class="cp-tabs collection-sort">${t("season", "クール別")}${t("rating", "自己評価順")}</div>`;
+}
 function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 const decadeOf = y => Math.floor(y / 10) * 10;
 
@@ -998,6 +1001,7 @@ function render() {
   renderStats();
   renderContextPanel();
   const list = document.getElementById("list");
+  const sortBar = (view.mode === "collection" && !query) ? collectionSortBar() : "";   // マイページのクール別/自己評価順トグル
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
   if (view.mode === "reco" && !query) { renderReco(list); return; }
@@ -1024,7 +1028,7 @@ function render() {
     } else {
       msg = "この条件の作品がありません。";
     }
-    list.innerHTML = `<div class="notice"><div class="big">🔍</div><p>${msg}</p></div>`;
+    list.innerHTML = sortBar + `<div class="notice"><div class="big">🔍</div><p>${msg}</p></div>`;
     return;
   }
 
@@ -1037,7 +1041,7 @@ function render() {
     const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
     const isCollection = view.mode === "collection";
     if (isCollection) {
-      list.innerHTML = decadeGroupsHtml(items);   // 年代→年→クールで階層表示（折りたたみ可）
+      list.innerHTML = sortBar + decadeGroupsHtml(items);   // 年代→年→クールで階層表示（折りたたみ可）
     } else {
       list.innerHTML = ys.map(y => yearBlockHtml(y, byYear[y], false)).join("");
     }
@@ -1088,7 +1092,7 @@ function ratingDecadeHtml(arr, r) {
 function renderCollectionByRating(list) {
   const items = catalog.filter(a => ratingOf(a.id) > 0 && passStatus(a));
   if (items.length === 0) {
-    list.innerHTML = `<div class="notice"><div class="big">★</div><p>1〜5点の評価を付けた作品がまだありません。ポスターを右クリックして評価を設定できます。</p></div>`;
+    list.innerHTML = collectionSortBar() + `<div class="notice"><div class="big">★</div><p>1〜5点の評価を付けた作品がまだありません。ポスターを右クリックして評価を設定できます。</p></div>`;
     return;
   }
   const byRating = {};
@@ -1109,7 +1113,7 @@ function renderCollectionByRating(list) {
       <div class="cour-body">${ratingDecadeHtml(arr, r)}</div>
     </section>`;
   }).join("");
-  list.innerHTML = `<div class="year-block">${html}</div>`;
+  list.innerHTML = collectionSortBar() + `<div class="year-block">${html}</div>`;
 }
 // 年代→年→クールの階層HTML（視聴コレクションと新着で共用）。折りたたみ対応。
 // prefix: 新着では追加日（例 "2026-06-13:"）を渡し、折りたたみキー兼 id サフィックスを名前空間化する。
