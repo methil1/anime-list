@@ -98,10 +98,10 @@
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
 
-  .stats { display: flex; gap: 14px; margin-top: 16px; flex-wrap: wrap; }
+  .stats { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; }
-  .stat .num { font-size: 1.15rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.2; }
-  .stat .lbl { color: var(--text-faint); font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  .stat .num { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .header-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 14px; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
@@ -405,7 +405,7 @@
       <a onclick="importWatch()">読み込み</a>
     </div>
 
-    <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a></p>
+    <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a> ・ 総作品数：<span id="catalog-total"></span></p>
   </main>
 </div>
 
@@ -841,8 +841,9 @@ function renderStats() {
     <div class="stat watching"><span class="num">${watching}</span><span class="lbl">視聴中</span></div>
     <div class="stat planning"><span class="num">${planning}</span><span class="lbl">視聴予定</span></div>
     <div class="stat dropped"><span class="num">${dropped}</span><span class="lbl">視聴中止</span></div>
-    <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>
-    <div class="stat"><span class="num">${catalog.length.toLocaleString()}</span><span class="lbl">カタログ作品</span></div>`;
+    <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>`;
+  const tc = document.getElementById("catalog-total");
+  if (tc) tc.textContent = catalog.length.toLocaleString();
 }
 
 /* ---------- 右上コンテキストパネル ---------- */
