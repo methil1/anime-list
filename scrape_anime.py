@@ -20,11 +20,11 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
                                         #   ONA(配信)など通常スクレイプ対象外の作品の取りこぼし補完に使う。
     python scrape_anime.py --authors    # 既存 anime-data.js の各作品に原作者(au)を後付け（AniList staff
                                         #   の Original Creator/Story 等）。au 未設定のみ。--force で全件再取得。
-    python scrape_anime.py --narou      # 原作がライトノベル/Web小説/小説の作品を なろう公式API で
+    python scrape_anime.py --narou      # 原作がライトノベル/Web小説/小説/その他の作品を なろう公式API で
                                         #   タイトル照合し、なろう発の作品に nr=1 を付与（未判定分のみ）。
     python scrape_anime.py --narou --force
                                         # 判定済みも含め全件を再判定。
-    python scrape_anime.py --kakuyomu   # 原作がライトノベル/Web小説/小説の作品を カクヨム検索で
+    python scrape_anime.py --kakuyomu   # 原作がライトノベル/Web小説/小説/その他の作品を カクヨム検索で
                                         #   タイトル照合し、カクヨム発の作品に kk=1 を付与（未判定分のみ）。
                                         #   なろう発(nr=1)と判定済みの作品はスキップ。--force で全件再判定。
 
@@ -947,7 +947,10 @@ def run_broadcast(batch=50):
 # なろう公式API (https://dev.syosetu.com/man/api/) でタイトル完全一致検索して判定する。
 # 判定結果は出力レコードの nr フィールドに持つ: 1=なろう発 / 0=判定済み・該当なし / 無し=未判定。
 NAROU_API = "https://api.syosetu.com/novelapi/api/"
-NAROU_SOURCES = {"ライトノベル", "Web小説", "小説"}
+# 小説系原作（ライトノベル/Web小説/小説）に加え「その他」も対象にする。
+# 書籍化されず Web 小説のままアニメ化された作品は AniList で source が
+# OTHER（その他）に分類されることがあり、ライトノベルだけだと取りこぼすため。
+NAROU_SOURCES = {"ライトノベル", "Web小説", "小説", "その他"}
 # タイトルが偶然一致した二次創作・パロディ小説を弾く総合評価ポイント下限。
 # 商業アニメ化される原作のポイントは数万〜数十万なので余裕を持って低めに設定。
 NAROU_MIN_POINT = 2000
@@ -972,7 +975,9 @@ NAROU_FORCE_IDS = {
     178707,  # 劇場版 四葉継承編
 }
 # なろうに同名小説があるが実際はなろう発ではない作品の手動除外（AniList ID）。
-NAROU_NOT_IDS = set()
+NAROU_NOT_IDS = {
+    14629,  # スターシップ・トゥルーパーズ インベイジョン（Heinlein の米SF小説原作のCG映画）
+}
 
 # アニメ側タイトル末尾の続編表記（第2期 / 2nd Season / 末尾の「2」「Ⅲ」等）。
 # 除去してから原作タイトルと照合する。
@@ -1080,7 +1085,7 @@ def is_narou_origin(rec):
 
 
 def run_narou(force=False):
-    """既存カタログの小説系原作の作品をなろうAPIで照合し nr フラグを付与する。
+    """既存カタログの小説系原作（その他含む）の作品をなろうAPIで照合し nr フラグを付与する。
     未判定（nr 無し）のみ処理。force=True で全件再判定。定期チェックポイント保存あり。"""
     existing = load_existing()
     anime = list(existing.get("anime", []))
@@ -1118,7 +1123,7 @@ def run_narou(force=False):
 # 埋め込まれているのでそれを解析する。判定結果は出力レコードの kk フィールドに持つ:
 # 1=カクヨム発 / 0=判定済み・該当なし / 無し=未判定。
 KAKUYOMU_SEARCH = "https://kakuyomu.jp/search"
-KAKUYOMU_SOURCES = NAROU_SOURCES  # 小説系原作（ライトノベル/Web小説/小説）のみ対象
+KAKUYOMU_SOURCES = NAROU_SOURCES  # 小説系原作（ライトノベル/Web小説/小説）＋その他
 # タイトルが偶然一致した二次創作・パロディを弾く評価ポイント下限。
 # カクヨムの totalReviewPoint はなろうの global_point より桁が小さいので低めに設定。
 KAKUYOMU_MIN_POINT = 100
@@ -1126,7 +1131,9 @@ KAKUYOMU_MIN_POINT = 100
 # 書籍化後にカクヨムから削除された等で検索に出ない作品の手動指定（AniList ID）。
 KAKUYOMU_FORCE_IDS = set()
 # カクヨムに同名作品があるが実際はカクヨム発ではない作品の手動除外（AniList ID）。
-KAKUYOMU_NOT_IDS = set()
+KAKUYOMU_NOT_IDS = {
+    97908,  # 打ち上げ花火、下から見るか？横から見るか？（岩井俊二の実写ドラマ(1993)が原作）
+}
 
 
 def kakuyomu_search(title, retries=3):
@@ -1184,7 +1191,7 @@ def is_kakuyomu_origin(rec):
 
 
 def run_kakuyomu(force=False):
-    """既存カタログの小説系原作の作品をカクヨム検索で照合し kk フラグを付与する。
+    """既存カタログの小説系原作（その他含む）の作品をカクヨム検索で照合し kk フラグを付与する。
     未判定（kk 無し）のみ処理。force=True で全件再判定。定期チェックポイント保存あり。
     なろう発（nr=1）と判定済みの作品はカクヨム発ではないのでスキップする。"""
     existing = load_existing()
