@@ -501,14 +501,25 @@ function viewScrollKey() { return query ? `search:${query}` : `${view.mode}:${vi
 function saveScroll() { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }
 // scroll イベントで現在ビューの位置を随時記録（次に戻ってきたとき復元するため）。
 window.addEventListener("scroll", () => { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }, { passive: true });
-// ビュー切替の共通処理: 旧ビューの位置を保存 → 状態変更(mutate) → 再描画 → 新ビューの位置を復元。
+// ビュー切替の共通処理:
+//  ・別ビューへ移動 → 旧ビューの位置を保存し、新ビューは記憶があれば元の位置へ復元。
+//  ・既に表示中のビューのボタンを再クリック → 記憶をリセットして先頭へスクロール
+//    （他ページからの初回移動と同じ「先頭から見る」動作にそろえる）。
 function navigate(mutate) {
+  const prevKey = activeScrollKey;       // 切替前ビューのキー
   saveScroll();                          // 旧ビューの最終位置を保存（activeScrollKey はまだ旧キー）
   mutate();                              // view / query / 各種フラグを更新
-  activeScrollKey = viewScrollKey();     // 先に新キーへ。render後の高さ変化で旧キーを汚さない
+  const newKey = viewScrollKey();
+  const sameView = newKey === prevKey;   // 同じビューのボタンを再クリックしたか
+  activeScrollKey = newKey;              // 先に新キーへ。render後の高さ変化で旧キーを汚さない
   renderYearbar();
   render();
-  window.scrollTo({ top: scrollMem[activeScrollKey] ?? 0, behavior: "auto" });   // 記憶があれば復元・無ければ先頭
+  if (sameView) {                        // 再クリック: 記憶を捨てて先頭へ
+    delete scrollMem[newKey];
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  } else {                               // 別ビュー: 記憶があれば元の位置へ復元・無ければ先頭
+    window.scrollTo({ top: scrollMem[newKey] ?? 0, behavior: "auto" });
+  }
 }
 
 /* ---------- persistence ----------
