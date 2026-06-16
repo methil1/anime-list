@@ -306,6 +306,25 @@
   .series-block { margin: 0 0 26px; }
   .series-head { font-size: 1.02rem; font-weight: 700; color: var(--text); margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--accent-soft); }
   .series-count { font-size: 0.8rem; font-weight: 600; color: var(--text-faint); margin-left: 8px; }
+  /* 視聴比較ビュー */
+  .cmp-banner-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+  .cmp-sum { margin-top: 8px; font-size: 0.84rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .cmp-key { font-weight: 600; padding: 1px 9px; border-radius: 999px; font-size: 0.78rem; }
+  .cmp-key.both { background: rgba(64, 209, 153, .16); color: var(--done); }
+  .cmp-key.mine { background: rgba(90, 169, 255, .16); color: #8cc4ff; }
+  .cmp-key.theirs { background: rgba(255, 159, 67, .16); color: #ffbb78; }
+  .cmp-banner .cp-tabs { margin-top: 11px; flex-wrap: wrap; }
+  .poster .cmp-row { margin-top: 5px; display: flex; flex-direction: column; gap: 1px; font-size: 0.66rem; line-height: 1.3; }
+  .poster .cmp-me { color: #cfe6ff; }
+  .poster .cmp-them { color: #ffe0bd; }
+  .poster .cmp-me.none, .poster .cmp-them.none { color: var(--text-faint); }
+  .poster.cmp-both { border-color: var(--done); }
+  .poster.cmp-mine { border-color: #5aa9ff; }
+  .poster.cmp-theirs { border-color: #ff9f43; }
+  .poster.cmp-both::after, .poster.cmp-mine::after, .poster.cmp-theirs::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; z-index: 2; }
+  .poster.cmp-both::after { background: var(--done); }
+  .poster.cmp-mine::after { background: #5aa9ff; }
+  .poster.cmp-theirs::after { background: #ff9f43; }
   .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
   .ctx-menu .ctx-item.on { color: var(--accent-soft); }
 
@@ -362,7 +381,6 @@
     <nav class="rail-views">
       <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
       <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
-      <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
     </nav>
 
     <div class="rail-group">
@@ -405,6 +423,7 @@
           <div class="stats" id="stats"></div>
           <div class="header-actions">
             <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着更新分</button>
+            <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
             <button class="ytab" id="score-btn" onclick="toggleScores()">★ 海外評価値表示</button>
           </div>
         </div>
@@ -417,7 +436,8 @@
     <div class="foot-note">
       視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
       <a onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
-      <a onclick="importWatch()">読み込み</a>
+      <a onclick="importWatch()">読み込み</a> ·
+      <a onclick="importCompare()">🆚 比較ファイルを追加</a>
     </div>
 
     <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a> ・ 総作品数：<span id="catalog-total"></span></p>
@@ -432,6 +452,7 @@
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
 const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
+const COMPARE_KEY = "animeTV.compare.v1"; // 比較相手の視聴データ { name, watch:{id:{s,ep,r}}, importedAt }
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
@@ -455,7 +476,9 @@ let catalog = [];
 let years = [];
 let watch = loadWatch();
 let series = loadSeries();   // シリーズ単位の「見たい」/「興味なし」 { want:{key:1}, hide:{key:-2} }
-let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series"
+let compare = loadCompare(); // 比較相手の視聴データ（null か {name, watch, importedAt}）
+let compareCat = "all";      // 比較ビューの絞り込み: "all" | "both"(共通) | "mine"(自分のみ) | "theirs"(相手のみ)
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
@@ -557,9 +580,18 @@ function saveSeries() {
   try { localStorage.setItem(SERIES_KEY, JSON.stringify(series)); }
   catch (e) { alert("保存に失敗: " + e.message); }
 }
-// 同一ベースタイトルのキー（続編表記を除去＋表記ゆれ正規化）。_sk と同様に遅延キャッシュ。
+// フランチャイズ統合: 劇場版などサブタイトルが毎作変わり、ベースタイトルでまとめられない
+// 長期シリーズを 1 つのキーに束ねる。原題に対するパターンで判定する（追加もここだけで済む）。
+const FRANCHISE_RULES = [
+  { re: /ポケットモンスター|ポケモン/, key: "@franchise/pokemon" },
+];
+function franchiseKey(t) {
+  for (const r of FRANCHISE_RULES) if (r.re.test(t || "")) return r.key;
+  return null;
+}
+// 同一ベースタイトルのキー（フランチャイズ統合 → 続編表記を除去＋表記ゆれ正規化）。_sk と同様に遅延キャッシュ。
 function seriesKey(a) {
-  if (a._series === undefined) a._series = kanaFold(primeBaseTitle(a.t));
+  if (a._series === undefined) a._series = franchiseKey(a.t) || kanaFold(primeBaseTitle(a.t));
   return a._series;
 }
 function isSeriesWanted(a) { return !!series.want[seriesKey(a)]; }
@@ -574,6 +606,31 @@ function toggleSeriesHide(a) {
   const k = seriesKey(a);
   if (series.hide[k]) delete series.hide[k]; else series.hide[k] = -2;
   saveSeries();
+}
+
+/* ---------- 視聴比較（他人と自分の対比）----------
+   相手が書き出した視聴履歴 JSON（自分の export と同形式 {id:{s,ep,r}}）を読み込み、
+   クールごとに自分／相手の視聴状況を対比する。compare = {name, watch, importedAt} か null。 */
+function loadCompare() {
+  try {
+    const r = localStorage.getItem(COMPARE_KEY);
+    if (r) { const o = JSON.parse(r); if (o && o.watch && typeof o.watch === "object") return o; }
+  } catch (e) { console.error(e); }
+  return null;
+}
+function saveCompare() {
+  try {
+    if (compare) localStorage.setItem(COMPARE_KEY, JSON.stringify(compare));
+    else localStorage.removeItem(COMPARE_KEY);
+  } catch (e) { console.error(e); }
+}
+function cmpStatusOf(id) { return (compare && compare.watch[id] && compare.watch[id].s) || "unwatched"; }
+function cmpRatingOf(id) { return (compare && compare.watch[id] && compare.watch[id].r) || 0; }
+// 比較カテゴリ: both=両者視聴 / mine=自分のみ / theirs=相手のみ / none=どちらも未視聴
+function cmpCat(id) {
+  const me = statusOf(id) !== "unwatched";
+  const them = cmpStatusOf(id) !== "unwatched";
+  return me && them ? "both" : me ? "mine" : them ? "theirs" : "none";
 }
 
 /* ---------- helpers ---------- */
@@ -642,6 +699,8 @@ function init() {
   catalog = cat.anime;
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   view.year = years[0];
+  // 別タブで #compare を開いた場合は比較ビューで起動（比較データ読込済みのときのみ）。
+  if (location.hash === "#compare" && compare) view = { mode: "compare", year: null };
   document.getElementById("src-note").textContent =
     `生成日 ${cat.created || cat.generated} ／ 更新日 ${cat.generated}`;
   applyScoreVisibility();
@@ -713,8 +772,10 @@ function renderYearbar() {
   if (rb) { rb.style.display = view.mode === "year" ? "" : "none"; rb.classList.toggle("active", view.mode === "recent"); }
   const rcb = document.getElementById("reco-btn");
   if (rcb) rcb.classList.toggle("active", view.mode === "reco");
-  const sb = document.getElementById("series-btn");
-  if (sb) sb.classList.toggle("active", view.mode === "series");
+  const sb = document.getElementById("series-btn");   // 見たいシリーズは TOP（年別）では出さず、おすすめ／見たいシリーズ表示時のみ
+  if (sb) { sb.style.display = (view.mode === "reco" || view.mode === "series") ? "" : "none"; sb.classList.toggle("active", view.mode === "series"); }
+  const pb = document.getElementById("compare-btn");   // 比較相手読込済みなら名前入りラベルに
+  if (pb) { pb.classList.toggle("active", view.mode === "compare"); pb.textContent = compare ? `🆚 ${compare.name}と比較` : "🆚 比較ファイルを追加"; }
 }
 function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
@@ -724,8 +785,20 @@ function collectionSortBar() {
   const t = (s, label) => `<button class="cp-tab ${collectionSort === s ? "active" : ""}" onclick="setCollectionSort('${s}')">${label}</button>`;
   return `<div class="cp-tabs collection-sort">${t("season", "クール別")}${t("rating", "自己評価順")}</div>`;
 }
-function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; recoShowSeriesHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function goSeries() { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+// 視聴比較ビューへ。比較相手データが無ければインポートを促す。
+function goCompare() {
+  if (!compare) { importCompare(); return; }
+  view = { mode: "compare", year: null }; query = ""; document.getElementById("search").value = "";
+  renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" });
+}
+function setCompareCat(c) { compareCat = c; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function clearCompare() {
+  if (!confirm("比較相手のデータを削除しますか？")) return;
+  compare = null; saveCompare();
+  if (view.mode === "compare") goCollection(); else renderYearbar();
+}
 const decadeOf = y => Math.floor(y / 10) * 10;
 
 // 折りたたみ状態を明示的にセット（DOM とクラス・トグル記号を同期）
@@ -1051,6 +1124,7 @@ function render() {
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
   if (view.mode === "reco" && !query) { renderReco(list); return; }
   if (view.mode === "series" && !query) { renderSeriesWant(list); return; }
+  if (view.mode === "compare" && !query) { renderCompare(list); return; }
   if (view.mode === "collection" && collectionSort === "rating" && !query) { renderCollectionByRating(list); return; }
 
   let items;
@@ -1225,6 +1299,7 @@ const RECO_QUALITY_W = 0.5;   // AniList sc(0-100) の品質プライア係数�
 const RECO_MIN_SEED = 5;      // 履歴がこれ未満ならコールドスタート（高評価作フォールバック）
 const RECO_LIMIT = 60;        // 表示件数
 let recoShowHidden = false;   // おすすめページで「興味なし一覧」を表示中か
+let recoShowSeriesHidden = false;   // おすすめページで「シリーズ興味なし一覧」を表示中か
 
 // 1作品の嗜好重み。評価優先、無ければ状態。0 は寄与なし。
 function recoSeedWeight(a) {
@@ -1265,14 +1340,38 @@ function recoScore(a, aff) {
 }
 function renderReco(list) {
   const hiddenItems = catalog.filter(a => isHidden(a.id));
+  // シリーズごと興味なしの作品（形式フィルタは尊重）。件数はシリーズ単位で数える。
+  const seriesHiddenItems = catalog.filter(a => isSeriesHidden(a) && formatFilter.has(a.f));
+  const seriesHiddenCount = new Set(seriesHiddenItems.map(seriesKey)).size;
   const hideToggle = `<button class="reco-toggle ${recoShowHidden ? "active" : ""}" onclick="toggleRecoHidden()">${recoShowHidden ? "← おすすめに戻る" : `🚫 興味なし ${hiddenItems.length}件`}</button>`;
+  const seriesHideToggle = `<button class="reco-toggle ${recoShowSeriesHidden ? "active" : ""}" onclick="toggleRecoSeriesHidden()">${recoShowSeriesHidden ? "← おすすめに戻る" : `🚫 シリーズ興味なし ${seriesHiddenCount}件`}</button>`;
 
   // 「興味なし一覧」表示モード（おすすめページ内のみ。右クリックで解除できる）。
   if (recoShowHidden) {
-    const banner = `<div class="reco-banner"><b>🚫 興味なし（おすすめ非表示）</b> ${hiddenItems.length}件 ${hideToggle}<div class="reco-sub">作品を右クリック →「✅ おすすめに表示する」で解除できます。</div></div>`;
+    const banner = `<div class="reco-banner"><b>🚫 興味なし（おすすめ非表示）</b> ${hiddenItems.length}件 ${hideToggle}${seriesHiddenItems.length ? " " + seriesHideToggle : ""}<div class="reco-sub">作品を右クリック →「✅ おすすめに表示する」で解除できます。</div></div>`;
     list.innerHTML = hiddenItems.length
       ? banner + `<div class="grid">${hiddenItems.map(a => posterHtml(a)).join("")}</div>`
       : `${banner}<div class="notice"><div class="big">🚫</div><p>「興味なし」にした作品はありません。</p></div>`;
+    return;
+  }
+
+  // 「シリーズ興味なし一覧」表示モード。シリーズ単位でまとめて表示し、右クリックで解除できる。
+  if (recoShowSeriesHidden) {
+    const byKey = {};
+    for (const a of seriesHiddenItems) (byKey[seriesKey(a)] = byKey[seriesKey(a)] || []).push(a);
+    const keys = Object.keys(byKey).sort((k1, k2) => primeBaseTitle(byKey[k1][0].t).localeCompare(primeBaseTitle(byKey[k2][0].t), "ja"));
+    const blocks = keys.map(k => {
+      const arr = byKey[k].sort((a, b) => (a.y || 0) - (b.y || 0) || (a.d || 0) - (b.d || 0));
+      const heading = primeBaseTitle(arr[0].t) || arr[0].t;
+      return `<div class="series-block">
+        <div class="series-head">🚫 ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
+        <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
+      </div>`;
+    }).join("");
+    const banner = `<div class="reco-banner"><b>🚫 シリーズ興味なし（おすすめ非表示）</b> ${seriesHiddenCount}シリーズ・${seriesHiddenItems.length}作品 ${hideToggle} ${seriesHideToggle}<div class="reco-sub">作品を右クリック →「✅ シリーズの興味なしを解除」で外せます。</div></div>`;
+    list.innerHTML = seriesHiddenItems.length
+      ? banner + blocks
+      : `${banner}<div class="notice"><div class="big">🚫</div><p>「シリーズごと興味なし」にしたシリーズはありません。</p></div>`;
     return;
   }
 
@@ -1281,7 +1380,7 @@ function renderReco(list) {
   // シリーズごと興味なし(hide)は除外。シリーズ「見たい」(want)は視聴決定済みなのでおすすめ候補から外す。
   const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && !isSeriesHidden(a) && !isSeriesWanted(a) && formatFilter.has(a.f));
   const hasProfile = ["g", "src", "st", "au"].some(ax => Object.keys(aff[ax]).length);
-  const toggleBit = hiddenItems.length ? " " + hideToggle : "";
+  const toggleBit = (hiddenItems.length ? " " + hideToggle : "") + (seriesHiddenItems.length ? " " + seriesHideToggle : "");
 
   if (seeds < RECO_MIN_SEED || !hasProfile) {   // コールドスタート: AniList高評価の未視聴作
     const top = candidates.filter(a => a.sc).sort((x, y) => (y.sc || 0) - (x.sc || 0)).slice(0, RECO_LIMIT);
@@ -1304,7 +1403,8 @@ function renderReco(list) {
   const banner = `<div class="reco-banner"><b>✨ あなたの好みに近い未視聴作品</b>${toggleBit}${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
   list.innerHTML = banner + `<div class="grid">${scored.map(([a]) => posterHtml(a)).join("")}</div>`;
 }
-function toggleRecoHidden() { recoShowHidden = !recoShowHidden; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function toggleRecoHidden() { recoShowHidden = !recoShowHidden; recoShowSeriesHidden = false; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function toggleRecoSeriesHidden() { recoShowSeriesHidden = !recoShowSeriesHidden; recoShowHidden = false; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 
 // 「見たいシリーズ」専用ビュー。want 登録シリーズの全話をシリーズ単位でまとめて表示する。
 // 形式フィルタは尊重、状態フィルタは無視（おすすめと同方針）。
@@ -1328,6 +1428,66 @@ function renderSeriesWant(list) {
   }).join("");
   const banner = `<div class="reco-banner"><b>📺 見たいシリーズ</b> ${keys.length}シリーズ・${items.length}作品<div class="reco-sub">作品を右クリック →「✅ シリーズを見たいリストから解除」で外せます。</div></div>`;
   list.innerHTML = banner + blocks;
+}
+
+// 視聴比較ビュー。自分(watch)と相手(compare.watch)の視聴状況をクールごとに対比表示する。
+// 形式フィルタは尊重、状態フィルタは無視（比較カテゴリで絞る）。グルーピングは年代→年→クールを再利用。
+function renderCompare(list) {
+  if (!compare) {
+    list.innerHTML = `<div class="notice"><div class="big">🆚</div><p>比較するファイルがありません。<br>フッターまたは左の「🆚 比較ファイルを追加」から、相手が書き出した視聴履歴 JSON を読み込んでください。</p></div>`;
+    return;
+  }
+  // どちらかが視聴済みの作品のみが比較対象（none を除外）。
+  const all = catalog.filter(a => formatFilter.has(a.f) && cmpCat(a.id) !== "none");
+  const both = all.filter(a => cmpCat(a.id) === "both");
+  const mine = all.filter(a => cmpCat(a.id) === "mine");
+  const theirs = all.filter(a => cmpCat(a.id) === "theirs");
+  const items = compareCat === "both" ? both : compareCat === "mine" ? mine : compareCat === "theirs" ? theirs : all;
+  const pct = all.length ? Math.round(both.length / all.length * 100) : 0;
+  const nm = esc(compare.name);
+  const tab = (c, label, n) => `<button class="cp-tab ${compareCat === c ? "active" : ""}" onclick="setCompareCat('${c}')">${label} ${n}</button>`;
+  const banner = `<div class="reco-banner cmp-banner">
+    <div class="cmp-banner-head"><b>🆚 ${nm} さんとの視聴比較</b>
+      <button class="reco-toggle" onclick="clearCompare()">✕ 比較を解除</button></div>
+    <div class="cmp-sum"><span class="cmp-key both">共通 ${both.length}作品</span>（一致度 <b>${pct}%</b>）・
+      <span class="cmp-key mine">あなただけ ${mine.length}</span>・
+      <span class="cmp-key theirs">${nm}だけ ${theirs.length}</span></div>
+    <div class="cp-tabs">${tab("all", "すべて", all.length)}${tab("both", "✓共通", both.length)}${tab("mine", "自分のみ", mine.length)}${tab("theirs", nm + "のみ", theirs.length)}</div>
+    <div class="reco-sub">左クリックで自分の視聴状況を変更できます（相手のデータは変わりません）。</div>
+  </div>`;
+  if (!items.length) {
+    list.innerHTML = banner + `<div class="notice"><div class="big">🔍</div><p>この条件の作品がありません。形式フィルタやカテゴリを確認してください。</p></div>`;
+    return;
+  }
+  list.innerHTML = banner + decadeGroupsHtml(items);   // 年代→年→クールでクールごとに対比表示
+}
+
+// 比較ファイル（相手の視聴履歴 JSON）を読み込む。読み込み後は別タブで #compare を開く（不可ならその場表示）。
+function importCompare() {
+  const inp = document.createElement("input");
+  inp.type = "file"; inp.accept = "application/json";
+  inp.onchange = () => {
+    const file = inp.files[0]; if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      try {
+        const parsed = JSON.parse(reader.result);
+        if (typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("形式が不正です（視聴履歴 JSON を選んでください）");
+        const w = migrateWatch(parsed);   // 自分の export と同形式を正規化（s/ep/r のみ採用）
+        if (!Object.keys(w).length) throw new Error("視聴データが空です");
+        let name = (file.name || "").replace(/\.json$/i, "").replace(/^anime-watch-?/, "").trim();
+        name = (prompt("比較相手の名前を入力してください（例: 友だち）", name || "相手") || name || "相手").trim() || "相手";
+        compare = { name, watch: w, importedAt: new Date().toISOString() };
+        saveCompare();
+        renderYearbar();
+        const win = window.open(location.pathname + "#compare", "_blank");
+        if (!win) { goCompare(); }   // ポップアップブロック時はその場で比較ビューへ
+        else toast(`${name} さんの視聴データを読み込みました（別タブで比較）`);
+      } catch (e) { alert("読み込み失敗: " + e.message); }
+    };
+    reader.readAsText(file);
+  };
+  inp.click();
 }
 function seasonGroupsHtml(items, year, prefix = "") {
   const bySeason = {};
@@ -1420,7 +1580,21 @@ function posterHtml(a, continuing) {
   const img = a.img
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
-  return `<article class="poster ${st}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
+  // 比較ビューでは自分／相手の視聴状況を対比する行とカテゴリ色（共通/自分のみ/相手のみ）を付与。
+  let cmpClass = "", cmpRow = "";
+  if (view.mode === "compare" && compare) {
+    const cat = cmpCat(a.id);
+    cmpClass = " cmp-" + cat;
+    const tSt = cmpStatusOf(a.id), tR = cmpRatingOf(a.id);
+    const meBit = st !== "unwatched"
+      ? `<span class="cmp-me">自分: ${STATUS_JA[st]}${r ? ` ★${r}` : ""}</span>`
+      : `<span class="cmp-me none">自分: —</span>`;
+    const themBit = tSt !== "unwatched"
+      ? `<span class="cmp-them">${esc(compare.name)}: ${STATUS_JA[tSt]}${tR ? ` ★${tR}` : ""}</span>`
+      : `<span class="cmp-them none">${esc(compare.name)}: —</span>`;
+    cmpRow = `<div class="cmp-row">${meBit}${themBit}</div>`;
+  }
+  return `<article class="poster ${st}${cmpClass}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : `<span class="score noscore">★-.-</span>`}
     <span class="status">${statusIcon(st)}</span>
@@ -1434,6 +1608,7 @@ function posterHtml(a, continuing) {
         ${prog}
         ${myRate}
       </div>
+      ${cmpRow}
     </div>
   </article>`;
 }
