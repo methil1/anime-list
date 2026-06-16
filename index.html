@@ -1655,9 +1655,10 @@ function ctxInner(a) {
     <div class="ctx-seclabel">視聴状態の変更</div>
     <div class="ctx-states">${states}</div>
     ${epRow}
+    ${(view.mode === "reco" || view.mode === "series") ? `
     <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? "✅ おすすめに表示する" : "🚫 おすすめに出さない"}</div>
     <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? "✅ シリーズを見たいリストから解除" : "📺 シリーズを見たいリストに追加"}</div>
-    <div class="ctx-item ctx-hide ${isSeriesHidden(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesHide(${id})">${isSeriesHidden(a) ? "✅ シリーズの興味なしを解除" : "🚫 シリーズごと興味なし"}</div>
+    <div class="ctx-item ctx-hide ${isSeriesHidden(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesHide(${id})">${isSeriesHidden(a) ? "✅ シリーズの興味なしを解除" : "🚫 シリーズごと興味なし"}</div>` : ""}
     <div class="ctx-divider"></div>
     <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
     ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
