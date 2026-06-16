@@ -497,17 +497,34 @@ let railFoldInit = false;
    リロードすると全て先頭に戻る。 */
 let scrollMem = {};            // { viewKey: スクロールY }
 let activeScrollKey = "";      // 現在表示中ビューのキー（scroll イベントの保存先）
+let lastNav = null;            // 直前に表示していたビュー { mode, year, query }（ページボタン再クリックで戻る先）
 function viewScrollKey() { return query ? `search:${query}` : `${view.mode}:${view.year ?? ""}`; }
 function saveScroll() { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }
 // scroll イベントで現在ビューの位置を随時記録（次に戻ってきたとき復元するため）。
 window.addEventListener("scroll", () => { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }, { passive: true });
-// ビュー切替の共通処理: 旧ビューの位置を保存 → 状態変更(mutate) → 再描画 → 元の位置へ復元。
-// 別ビューへ移動しても、同じビューのボタンを再クリックしても、常に前回見ていた
-// スクロール位置を復元する（記憶があれば復元・無ければ先頭）。
+// ビュー切替の共通処理:
+//  ・別ビューへ移動 → 旧ビューの位置を保存し、来たビューを lastNav に記録、新ビューは記憶位置へ復元。
+//  ・既に表示中の「ページボタン」（マイページ等＝年別以外）を再クリック → 直前に見ていた
+//    ビュー（lastNav）へ戻り、そのスクロール位置を復元する。年別タブの再クリックは現状維持。
+// いずれも記憶があれば前回見ていたスクロール位置へ復元する（無ければ先頭）。
 function navigate(mutate) {
+  const prevKey = activeScrollKey;                         // 切替前ビューのキー
+  const fromState = { mode: view.mode, year: view.year, query };   // 切替前のビュー
   saveScroll();                          // 旧ビューの最終位置を保存（activeScrollKey はまだ旧キー）
   mutate();                              // view / query / 各種フラグを更新
-  activeScrollKey = viewScrollKey();     // 先に新キーへ。render後の高さ変化で旧キーを汚さない
+  let newKey = viewScrollKey();
+  if (newKey === prevKey && view.mode !== "year" && lastNav) {
+    // ページボタンの再クリック（例: マイページ→マイページ）→ 元いたビューへ戻る
+    const back = lastNav;
+    lastNav = fromState;                 // 戻り先を入れ替え（往復できるように）
+    view = { mode: back.mode, year: back.year };
+    query = back.query || "";
+    document.getElementById("search").value = query;
+    newKey = viewScrollKey();
+  } else if (newKey !== prevKey) {
+    lastNav = fromState;                 // どのビューから来たかを記録
+  }
+  activeScrollKey = newKey;              // 先に新キーへ。render後の高さ変化で旧キーを汚さない
   renderYearbar();
   render();
   window.scrollTo({ top: scrollMem[activeScrollKey] ?? 0, behavior: "auto" });   // 前回見ていた位置へ復元
