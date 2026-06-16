@@ -491,6 +491,26 @@ let courTouched = new Set();      // ユーザーが手動開閉したクール�
 let railFoldedDecades = new Set(); // 左レール年ナビで畳んでいる年代（最新年代以外を初期で畳む）
 let railFoldInit = false;
 
+/* ---------- スクロール位置の記憶（ページ更新=F5 でリセット） ----------
+   ビューごと（年別の各年・マイページ・おすすめ等・検索）に最後のスクロール位置を保持し、
+   同じビューへ戻ったときに元の位置まで復元する。localStorage には保存しないので
+   リロードすると全て先頭に戻る。 */
+let scrollMem = {};            // { viewKey: スクロールY }
+let activeScrollKey = "";      // 現在表示中ビューのキー（scroll イベントの保存先）
+function viewScrollKey() { return query ? `search:${query}` : `${view.mode}:${view.year ?? ""}`; }
+function saveScroll() { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }
+// scroll イベントで現在ビューの位置を随時記録（次に戻ってきたとき復元するため）。
+window.addEventListener("scroll", () => { if (activeScrollKey) scrollMem[activeScrollKey] = window.scrollY; }, { passive: true });
+// ビュー切替の共通処理: 旧ビューの位置を保存 → 状態変更(mutate) → 再描画 → 新ビューの位置を復元。
+function navigate(mutate) {
+  saveScroll();                          // 旧ビューの最終位置を保存（activeScrollKey はまだ旧キー）
+  mutate();                              // view / query / 各種フラグを更新
+  activeScrollKey = viewScrollKey();     // 先に新キーへ。render後の高さ変化で旧キーを汚さない
+  renderYearbar();
+  render();
+  window.scrollTo({ top: scrollMem[activeScrollKey] ?? 0, behavior: "auto" });   // 記憶があれば復元・無ければ先頭
+}
+
 /* ---------- persistence ----------
    watch[id] = { s: 状態, ep: 話数, r: 自分評価1-5 }。
    旧形式（watch[id] = "状態" の文字列）は読み込み時にオブジェクトへ移行する。 */
@@ -708,6 +728,7 @@ function init() {
   syncChips("formatfilters", "ff", formatFilter, FORMAT_KEYS);
   renderYearbar();
   render();
+  activeScrollKey = viewScrollKey();   // 初期ビューのスクロール記録を開始
   syncYearbars();
 }
 
@@ -777,21 +798,20 @@ function renderYearbar() {
   const pb = document.getElementById("compare-btn");   // 比較相手読込済みなら名前入りラベルに
   if (pb) { pb.classList.toggle("active", view.mode === "compare"); pb.textContent = compare ? `🆚 ${compare.name}と比較` : "🆚 比較ファイルを追加"; }
 }
-function goYear(y) { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function goCollection() { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goYear(y) { navigate(() => { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; }); }
+function goCollection() { navigate(() => { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; }); }
 // マイページ内の並び替え（クール別 / 自己評価順）。視聴済みリストは同一なので同じビュー内で切替。
 function setCollectionSort(s) { collectionSort = s; renderYearbar(); render(); }
 function collectionSortBar() {
   const t = (s, label) => `<button class="cp-tab ${collectionSort === s ? "active" : ""}" onclick="setCollectionSort('${s}')">${label}</button>`;
   return `<div class="cp-tabs collection-sort">${t("season", "クール別")}${t("rating", "自己評価順")}</div>`;
 }
-function goReco() { view = { mode: "reco", year: null }; recoShowHidden = false; recoShowSeriesHidden = false; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function goSeries() { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goReco() { navigate(() => { view = { mode: "reco", year: null }; recoShowHidden = false; recoShowSeriesHidden = false; query = ""; document.getElementById("search").value = ""; }); }
+function goSeries() { navigate(() => { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; }); }
 // 視聴比較ビューへ。比較相手データが無ければインポートを促す。
 function goCompare() {
   if (!compare) { importCompare(); return; }
-  view = { mode: "compare", year: null }; query = ""; document.getElementById("search").value = "";
-  renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" });
+  navigate(() => { view = { mode: "compare", year: null }; query = ""; document.getElementById("search").value = ""; });
 }
 function setCompareCat(c) { compareCat = c; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
 function clearCompare() {
@@ -874,7 +894,7 @@ function toggleCour(key) {
   if (collapsed && view.mode === "collection") maybeAutoFoldYear(Number(key.split("-")[0]));
   if (collapsed && key.startsWith("ratedec-")) maybeAutoFoldRating(key);
 }
-function goRecent() { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; renderYearbar(); render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function goRecent() { navigate(() => { view = { mode: "recent", year: null }; query = ""; document.getElementById("search").value = ""; }); }
 
 /* ---------- filters（複数選択トグル） ----------
    「すべて」= 全選択状態（個別チップが全点灯）。
@@ -968,7 +988,13 @@ function searchKey(a) {
   return a._sk;
 }
 
-function onSearch() { query = kanaFold(document.getElementById("search").value.trim()); render(); }
+function onSearch() {
+  saveScroll();                          // 検索開始前のビュー位置を保存
+  query = kanaFold(document.getElementById("search").value.trim());
+  activeScrollKey = viewScrollKey();     // query の有無でキーが変わる（検索中は search:〜）
+  render();
+  window.scrollTo({ top: scrollMem[activeScrollKey] ?? 0, behavior: "auto" });   // 検索結果は先頭から・空に戻したら元ビュー位置へ
+}
 
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
@@ -1181,7 +1207,10 @@ function countBreakdown(arr) {
 function yearBlockHtml(y, yearItems, isCollection, prefix = "") {
   const yKey = prefix ? `${prefix}${y}` : y;
   const yArg = prefix ? `'${yKey}'` : y;
-  const collapsed = collapsedYears.has(yKey);
+  // 折りたたみトグルが付くのはコレクション系（isCollection=true）のみ。検索結果など
+  // isCollection=false の場面では▶トグルが無いため、collapsed を適用すると content が
+  // display:none のまま開けなくなる。コレクション系でのみ折りたたみ状態を反映する。
+  const collapsed = isCollection && collapsedYears.has(yKey);
   const toggle = isCollection ? `<span class="year-head-toggle" onclick="toggleYear(${yArg}); event.stopPropagation()">${collapsed ? "▶" : "▼"}</span>` : "";
   const headBtn = isCollection ? `onclick="toggleYear(${yArg})"` : "";
   const countText = countBreakdown(yearItems);
@@ -1542,7 +1571,8 @@ function seasonGroupsHtml(items, year, prefix = "") {
         && year === CURRENT_YEAR && SEASON_ORDER[s] < SEASON_ORDER[cc.season]) {
       collapsedCours.add(courKey);
     }
-    const courCollapsed = collapsedCours.has(courKey);
+    // 検索中（query）は結果を常に全展開で見せる。コレクション等で畳んだ状態を引き継がない。
+    const courCollapsed = !query && collapsedCours.has(courKey);
     return `<section class="cour ${courCollapsed ? "collapsed" : ""}" id="cour-${courKey}">
       <div class="cour-head ${SEASON_CLS[s] || ""}" onclick="toggleCour('${courKey}')">
         <span class="cour-head-toggle">${courCollapsed ? "▶" : "▼"}</span>
