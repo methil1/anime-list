@@ -147,6 +147,42 @@
   .cp-leg-v { color: var(--text-faint); font-variant-numeric: tabular-nums; }
   @media (max-width: 820px) { .context-panel { display: none; } }
 
+  /* 放送カレンダー（別ページオーバーレイ） */
+  .cal-overlay { position: fixed; inset: 0; z-index: 58; background: rgba(8, 9, 12, .93);
+    backdrop-filter: blur(3px); display: none; flex-direction: column; padding: 22px clamp(14px, 4vw, 48px) 30px; overflow-y: auto; }
+  .cal-overlay.open { display: flex; }
+  .cal-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+  .cal-head h2 { font-size: 1.15rem; font-weight: 800; letter-spacing: .02em; }
+  .cal-month { font-size: 1.05rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; min-width: 128px; text-align: center; }
+  .cal-nav { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.15rem; line-height: 1; font-family: inherit; transition: all .12s; }
+  .cal-nav:hover { color: var(--text); border-color: var(--border-strong); }
+  .cal-spacer { flex: 1 1 auto; }
+  .cal-btn { background: var(--bg-elev); border: 1px solid var(--border-strong); color: var(--text-dim);
+    padding: 7px 15px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all .12s; }
+  .cal-btn:hover { color: var(--text); border-color: var(--text-faint); }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-dow { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--text-faint); padding-bottom: 2px; }
+  .cal-dow.sun { color: var(--dropped); }
+  .cal-dow.sat { color: var(--maybe); }
+  .cal-cell { background: var(--bg-card); border: 1px solid var(--border); border-radius: 8px;
+    min-height: 118px; max-height: 220px; padding: 6px 6px 4px; display: flex; flex-direction: column; }
+  .cal-cell.blank { background: transparent; border: 0; min-height: 0; }
+  .cal-cell.today { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+  .cal-date { font-size: 0.78rem; font-weight: 700; color: var(--text-dim); margin-bottom: 4px; flex: 0 0 auto; }
+  .cal-date.sun { color: var(--dropped); }
+  .cal-date.sat { color: var(--maybe); }
+  .cal-cell.today .cal-date { color: var(--accent-soft); }
+  .cal-items { display: flex; flex-direction: column; gap: 2px; overflow-y: auto; min-height: 0; }
+  .cal-items::-webkit-scrollbar { width: 5px; }
+  .cal-items::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 999px; }
+  .cal-item { display: flex; gap: 5px; align-items: baseline; padding: 1px 3px; border-radius: 5px; cursor: default; line-height: 1.25; }
+  .cal-item:hover { background: var(--bg-elev); }
+  .cal-item .t { flex: 0 0 auto; font-size: 0.6rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; }
+  .cal-item .n { flex: 1 1 auto; min-width: 0; font-size: 0.64rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .cal-empty { color: var(--text-faint); font-size: 0.92rem; text-align: center; padding: 44px 0; }
+  @media (max-width: 700px) { .cal-cell { min-height: 80px; } .cal-grid { gap: 3px; } .cal-item .t { display: none; } }
+
   /* Toolbar */
   .toolbar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 26px; }
   .toolbar .tlabel { color: var(--text-faint); font-size: 0.78rem; }
@@ -426,6 +462,7 @@
           <div class="header-actions">
             <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着更新分</button>
             <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
+            <button class="ytab" id="calendar-btn" onclick="openCalendar()">📅 放送カレンダー</button>
             <button class="ytab" id="score-btn" onclick="toggleScores()">★ 海外評価値表示</button>
           </div>
         </div>
@@ -450,6 +487,7 @@
 <div class="ctx-menu" id="ctxmenu"></div>
 <div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
+<div class="cal-overlay" id="cal-overlay" onclick="if(event.target===this)closeCalendar()"></div>
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
@@ -1087,6 +1125,92 @@ function schedulePanelHtml() {
   }).join("");
   return `${head}<div class="sched">${cols}</div>${undated ? `<div class="sched-empty" style="margin-top:7px">放送枠不明 ${undated}本</div>` : ""}`;
 }
+/* ---------- 放送カレンダー（別ページオーバーレイ） ---------- */
+let calY = null, calM = null;   // 表示中の年・月(0-11)。null=未初期化
+function openCalendar() {
+  if (calY === null) { const n = new Date(); calY = n.getFullYear(); calM = n.getMonth(); }
+  document.getElementById("cal-overlay").classList.add("open");
+  document.body.style.overflow = "hidden";
+  renderCalendar();
+}
+function closeCalendar() {
+  document.getElementById("cal-overlay").classList.remove("open");
+  document.body.style.overflow = "";
+  hideInfo();
+}
+function calNav(delta) {
+  calM += delta;
+  if (calM < 0) { calM = 11; calY--; } else if (calM > 11) { calM = 0; calY++; }
+  renderCalendar();
+}
+function calToday() { const n = new Date(); calY = n.getFullYear(); calM = n.getMonth(); renderCalendar(); }
+// 現クール放送中の作品を、表示中の月の各日付に割り当てる。
+// air(初回放送UNIX秒)＋話数があれば毎週進めて実日付に配置、無ければ bc の曜日で月内に毎週反復。
+function calItemsByDay() {
+  const DAY_HIDE_FROM = 5 * 60, DAY_HIDE_TO = 15 * 60;   // 昼間アニメは放送表と同様に非表示
+  const byDay = {};
+  const add = (day, time, mins, a) => {
+    if (mins >= DAY_HIDE_FROM && mins < DAY_HIDE_TO) return;
+    (byDay[day] = byDay[day] || []).push({ time, mins, a });
+  };
+  const daysInMonth = new Date(calY, calM + 1, 0).getDate();
+  for (const a of currentlyAiring()) {
+    const ep = (a.air && a.ep && a.ep > 0 && a.ep <= 200) ? a.ep : null;
+    if (ep) {
+      for (let k = 0; k < ep; k++) {
+        const d = new Date(a.air * 1000 + k * 7 * 86400000 + 9 * 3600000);   // JST、毎週1話
+        if (d.getUTCFullYear() === calY && d.getUTCMonth() === calM) {
+          const h = d.getUTCHours(), m = d.getUTCMinutes();
+          add(d.getUTCDate(), `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`, h * 60 + m, a);
+        }
+      }
+      continue;
+    }
+    const s = airSlot(a);   // air無し or 話数不明 → 曜日で月内反復
+    if (!s) continue;
+    for (let day = 1; day <= daysInMonth; day++) {
+      if (new Date(Date.UTC(calY, calM, day)).getUTCDay() === s.day) add(day, s.time, s.mins, a);
+    }
+  }
+  for (const k in byDay) byDay[k].sort((x, y) => x.mins - y.mins);
+  return byDay;
+}
+function renderCalendar() {
+  const el = document.getElementById("cal-overlay");
+  const byDay = calItemsByDay();
+  const n = new Date();
+  const todayDate = (n.getFullYear() === calY && n.getMonth() === calM) ? n.getDate() : -1;
+  const dows = ["日", "月", "火", "水", "木", "金", "土"];
+  const head = dows.map((d, i) => `<div class="cal-dow ${i === 0 ? "sun" : i === 6 ? "sat" : ""}">${d}</div>`).join("");
+  const first = new Date(Date.UTC(calY, calM, 1)).getUTCDay();
+  const daysInMonth = new Date(calY, calM + 1, 0).getDate();
+  let cells = "", total = 0;
+  for (let i = 0; i < first; i++) cells += `<div class="cal-cell blank"></div>`;
+  for (let day = 1; day <= daysInMonth; day++) {
+    const items = byDay[day] || [];
+    total += items.length;
+    const dow = new Date(Date.UTC(calY, calM, day)).getUTCDay();
+    const dcls = day === todayDate ? "" : (dow === 0 ? "sun" : dow === 6 ? "sat" : "");
+    const rows = items.map(s => `<div class="cal-item" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("");
+    cells += `<div class="cal-cell ${day === todayDate ? "today" : ""}"><div class="cal-date ${dcls}">${day}</div><div class="cal-items">${rows}</div></div>`;
+  }
+  const cc = currentCour();
+  const body = total
+    ? `<div class="cal-grid">${head}${cells}</div>`
+    : `<div class="cal-grid">${head}${cells}</div><div class="cal-empty">この月の放送情報がありません。</div>`;
+  el.innerHTML = `
+    <div class="cal-head">
+      <h2>📅 放送カレンダー</h2>
+      <span style="color:var(--text-faint);font-size:.82rem;font-weight:600">${cc.year}年 ${SEASON_JA[cc.season]}クール 放送中</span>
+      <button class="cal-nav" onclick="calNav(-1)" title="前の月">‹</button>
+      <span class="cal-month">${calY}年 ${calM + 1}月</span>
+      <button class="cal-nav" onclick="calNav(1)" title="次の月">›</button>
+      <button class="cal-btn" onclick="calToday()">今月</button>
+      <span class="cal-spacer"></span>
+      <button class="cal-btn" onclick="closeCalendar()">✕ 閉じる</button>
+    </div>${body}`;
+}
+
 // ---- コレクション時パネル: 視聴済の傾向（割合バー / 円グラフ切替）----
 const PIE_COLORS = ["#7c5cff", "#34d399", "#fbbf24", "#38bdf8", "#f472b6", "#f87171", "#a48bff", "#4ade80", "#94a3b8"];
 
@@ -1786,6 +1910,13 @@ function hideCtxMenu() {
 document.addEventListener("click", hideCtxMenu);
 document.addEventListener("contextmenu", e => { if (!e.defaultPrevented) hideCtxMenu(); });
 document.addEventListener("keydown", e => { if (e.key === "Escape") hideCtxMenu(); });
+document.addEventListener("keydown", e => {
+  if (document.getElementById("cal-overlay").classList.contains("open")) {
+    if (e.key === "Escape") closeCalendar();
+    else if (e.key === "ArrowLeft") calNav(-1);
+    else if (e.key === "ArrowRight") calNav(1);
+  }
+});
 // 表示直後はスクロールで閉じない（慣性スクロールや遅延画像のレイアウト変動対策）
 window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hideCtxMenu(); }, true);
 window.addEventListener("resize", hideCtxMenu);
