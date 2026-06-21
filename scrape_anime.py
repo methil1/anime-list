@@ -210,6 +210,42 @@ def amazon_video_url(m):
     return None
 
 
+# 配信サービス site名(AniList) → 短縮コードのマップ。lower化した site に部分一致で判定。
+# index.html の SV_NAMES と対応。無料系(youtube/twitter/vimeo)はサービスとして出さない。
+STREAM_SERVICES = [
+    ("nf",     ["netflix"]),
+    ("cr",     ["crunchyroll"]),
+    ("prime",  ["prime video", "amazon"]),
+    ("dani",   ["danime", "d anime", "anime store", "dアニメ"]),
+    ("unext",  ["u-next", "unext"]),
+    ("abema",  ["abema"]),
+    ("nico",   ["niconico", "nico nico", "nicovideo"]),
+    ("disney", ["disney"]),
+    ("hulu",   ["hulu"]),
+    ("hidive", ["hidive"]),
+    ("bandai", ["bandai"]),
+    ("bili",   ["bilibili"]),
+    ("funi",   ["funimation"]),
+]
+
+
+def streaming_services(m):
+    """externalLinks の STREAMING リンクから配信サービス短縮コード配列を返す（昇順・重複排除）。
+    既知サービスのみ。1つも該当が無ければ空配列。"""
+    codes = set()
+    for l in (m.get("externalLinks") or []):
+        if l.get("type") != "STREAMING":
+            continue
+        site = (l.get("site") or "").strip().lower()
+        if not site:
+            continue
+        for code, keys in STREAM_SERVICES:
+            if any(k in site for k in keys):
+                codes.add(code)
+                break
+    return sorted(codes)
+
+
 def char_pairs(m):
     """メインキャラ（最大5）を [キャラ名, 日本語CV名] の配列で返す。
     UIは先頭4件を表示し、5件目があれば「…」で続きを示す。CV未登録は名前のみ。"""
@@ -868,6 +904,44 @@ def run_prime_backfill(force=False, batch=25):
     print(f"\n完了: {done} 件処理 / pv付き {pv_total} 件（{OUT_PATH} 更新済み）。", flush=True)
 
 
+def run_stream_backfill(force=False, batch=25):
+    """既存 anime-data.js の各作品に配信サービス短縮コード配列(sv)を後付けする。
+    run_prime_backfill と同型: 他フィールドは触らず sv のみ set/pop。既定では sv 未設定の
+    作品だけ id_in でバッチ取得（中断後の再実行で続きから）。force=True で全件再取得。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime if force or "sv" not in a]
+    print(f"配信サービス取得対象: {len(todo)} / 全 {len(anime)} 件 (batch={batch})", flush=True)
+    done = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(ENRICH_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    GraphQL error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        for m in data["data"]["Page"]["media"]:
+            a = by_id.get(m["id"])
+            if a is None:
+                continue
+            sv = streaming_services(m)
+            if sv:
+                a["sv"] = sv
+            else:
+                a.pop("sv", None)
+        done += len(ids)
+        step = i // batch
+        if step % 20 == 0:
+            print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        if step and step % 50 == 0:
+            write_catalog(anime)  # 定期チェックポイント（中断対策）
+        time.sleep(1.0)
+    write_catalog(anime)
+    sv_total = sum(1 for a in anime if a.get("sv"))
+    print(f"\n完了: {done} 件処理 / 配信情報付き {sv_total} 件（{OUT_PATH} 更新済み）。", flush=True)
+
+
 # ---------- MAL放送枠(Jikan)で古い作品の放映曜日・時刻を補完 ----------
 # AniListのairingScheduleが無い旧作向け。idMal経由でJikanのbroadcast(曜日・時刻)を取得する。
 JIKAN_URL = "https://api.jikan.moe/v4/anime/{}"
@@ -1287,6 +1361,9 @@ def main():
     elif args and args[0] == "--prime":
         # Amazon プライム・ビデオの URL(pv) をバックフィル（pv のみ更新）。
         run_prime_backfill(force="--force" in args)
+    elif args and args[0] == "--stream":
+        # 配信サービス短縮コード配列(sv)をバックフィル（sv のみ更新）。
+        run_stream_backfill(force="--force" in args)
     elif args and args[0] == "--broadcast":
         # air が無い旧クール作品に MAL(Jikan) の放送曜日・時刻(bc) を補完。
         run_broadcast()

@@ -4,4 +4,5 @@ auto_update.log
 dates_backfill.log
 broadcast_backfill.log
 prime_backfill.log
+stream_backfill.log
 authors_backfill.log
