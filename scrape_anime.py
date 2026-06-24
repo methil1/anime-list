@@ -214,7 +214,6 @@ def amazon_video_url(m):
 # index.html の SV_NAMES と対応。無料系(youtube/twitter/vimeo)はサービスとして出さない。
 STREAM_SERVICES = [
     ("nf",     ["netflix"]),
-    ("cr",     ["crunchyroll"]),
     ("prime",  ["prime video", "amazon"]),
     ("dani",   ["danime", "d anime", "anime store", "dアニメ"]),
     ("unext",  ["u-next", "unext"]),
@@ -222,9 +221,7 @@ STREAM_SERVICES = [
     ("nico",   ["niconico", "nico nico", "nicovideo"]),
     ("disney", ["disney"]),
     ("hulu",   ["hulu"]),
-    ("hidive", ["hidive"]),
     ("bandai", ["bandai"]),
-    ("bili",   ["bilibili"]),
     ("funi",   ["funimation"]),
 ]
 

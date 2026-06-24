@@ -2323,9 +2323,9 @@ function airInfoRow(a) {
 }
 // 配信サービス短縮コード → 表示名（scrape_anime.py の STREAM_SERVICES と対応）。
 const SV_NAMES = {
-  nf: "Netflix", cr: "Crunchyroll", prime: "Prime Video", dani: "dアニメストア",
+  nf: "Netflix", prime: "Prime Video", dani: "dアニメストア",
   unext: "U-NEXT", abema: "ABEMA", nico: "ニコニコ", disney: "Disney+",
-  hulu: "Hulu", hidive: "HIDIVE", bandai: "バンダイCh", bili: "Bilibili", funi: "Funimation"
+  hulu: "Hulu", bandai: "バンダイCh", funi: "Funimation"
 };
 // 情報カードの「配信」行（テキスト表示。カードは pointer-events:none なのでクリック不可）。
 function svRow(a) {
@@ -2336,16 +2336,13 @@ function svRow(a) {
 // 各配信サービスの作品検索URL（タイトルは encodeURIComponent 済みを受ける）。
 const SV_SEARCH = {
   nf: t => `https://www.netflix.com/search?q=${t}`,
-  cr: t => `https://www.crunchyroll.com/search?q=${t}`,
   dani: t => `https://animestore.docomo.ne.jp/animestore/sch_pc?searchKey=${t}`,
   unext: t => `https://video.unext.jp/freeword?query=${t}`,
   abema: t => `https://abema.tv/search?q=${t}`,
   nico: t => `https://www.nicovideo.jp/search/${t}`,
   disney: t => `https://www.disneyplus.com/search?q=${t}`,
   hulu: t => `https://www.hulu.jp/search?q=${t}`,
-  hidive: t => `https://www.hidive.com/search?q=${t}`,
   bandai: t => `https://www.b-ch.com/search/?word=${t}`,
-  bili: t => `https://www.bilibili.tv/en/search-result?keyword=${t}`,
   funi: t => `https://www.crunchyroll.com/search?q=${t}`
 };
 function openStreamSearch(id, code) {
