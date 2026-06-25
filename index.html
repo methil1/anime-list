@@ -373,6 +373,14 @@
 
   /* toast */
   .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: 0 12px 30px -10px rgba(0,0,0,.7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
+  /* 先頭へ戻るフローティングボタン（カレンダー(z-58)より下＝オーバーレイ表示中は隠す） */
+  .to-top { position: fixed; bottom: 22px; right: 22px; z-index: 55; width: 46px; height: 46px; border-radius: 50%;
+    background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-dim); font-size: 1.25rem; line-height: 1;
+    cursor: pointer; font-family: inherit; box-shadow: 0 10px 26px -10px rgba(0,0,0,.7);
+    opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity .2s, transform .2s, color .12s, border-color .12s; }
+  .to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
+  .to-top:hover { color: var(--accent-soft); border-color: var(--accent); }
+  @media (max-width: 700px) { .to-top { bottom: 16px; right: 16px; width: 42px; height: 42px; } }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
 
   /* Context menu (右クリック) */
@@ -484,6 +492,7 @@
 </div>
 
 <div class="toast" id="toast"></div>
+<button class="to-top" id="to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })" title="先頭へ戻る" aria-label="先頭へ戻る">↑</button>
 <div class="ctx-menu" id="ctxmenu"></div>
 <div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
@@ -1919,6 +1928,11 @@ document.addEventListener("keydown", e => {
 });
 // 表示直後はスクロールで閉じない（慣性スクロールや遅延画像のレイアウト変動対策）
 window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hideCtxMenu(); }, true);
+// 先頭へ戻るボタン: 600px以上スクロールで表示
+window.addEventListener("scroll", () => {
+  const b = document.getElementById("to-top");
+  if (b) b.classList.toggle("show", window.scrollY > 600);
+}, { passive: true });
 window.addEventListener("resize", hideCtxMenu);
 
 /* ---------- ホバー情報カード ---------- */
