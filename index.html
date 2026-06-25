@@ -378,6 +378,7 @@
     border-radius: 7px; padding: 7px 0; font-family: inherit; font-size: 0.82rem; cursor: pointer; font-variant-numeric: tabular-nums; transition: background .1s, border-color .1s; }
   .ep-modal .ep-chip:hover { border-color: var(--border-strong); color: var(--text); }
   .ep-modal .ep-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ep-modal .ep-hint { font-size: 0.72rem; color: var(--text-faint); margin: -6px 0 12px; }
   .ep-modal .ep-upto { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 12px; }
   .ep-modal .ep-upto input { width: 64px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 7px; font-family: inherit; font-size: 0.85rem; }
   .ep-modal .ep-actions { display: flex; gap: 8px; }
@@ -1252,8 +1253,15 @@ function renderStats() {
   for (const id in watch) {
     const v = (watch[id] || {}).s;
     if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; else if (v === "dropped") dropped++; else if (v === "planning") planning++;
-    totalEps += epOf(id);
-    if (v === "done") { const a = catalog.find(x => x.id === +id); if (a && a.f === "MOVIE") movieDone++; }
+    // 視聴話数は「視聴済」=全話(a.ep)、「視聴中」=記録した進捗(epOf)を加算。
+    // 旧データ（話数記録なしで視聴済にしたもの）も視聴済なら全話として計上する。
+    const a = catalog.find(x => x.id === +id);
+    if (v === "done") {
+      if (a && a.f === "MOVIE") movieDone++;
+      else totalEps += (a && a.ep) ? a.ep : epOf(id);
+    } else if (v === "watching") {
+      totalEps += epOf(id);
+    }
   }
   const watchMin = totalEps * 24 + movieDone * 120;   // TV/話=24分概算、劇場=120分概算
   document.getElementById("stats").innerHTML = `
@@ -2114,6 +2122,7 @@ window.addEventListener("scroll", () => { if (Date.now() - ctxOpenedAt > 150) hi
 /* ---------- 話数記録モーダル（エピソード単位） ---------- */
 let epModalId = null;
 let epcSel = 0;   // 話数モーダルで感想入力中の話番号（0=自動選択）
+let epAnchor = 0; // 話チップの範囲選択の起点（直近に通常クリックした話番号。0=未設定）
 // 話数変更後の共通リフレッシュ: 背後のポスター・統計・キュー・モーダル自身を更新。
 function afterEpChange(id) {
   updatePoster(id);
@@ -2130,6 +2139,7 @@ function openEpModal(id) {
   const w = watch[id];
   if (w && !Array.isArray(w.eps) && w.ep > 0) markUpTo(id, w.ep, a.ep || 0);
   epcSel = 0;
+  epAnchor = 0;
   epModalId = id;
   renderEpModal(id);
   document.getElementById("epoverlay").classList.add("show");
@@ -2139,6 +2149,20 @@ function closeEpModal() {
   epModalId = null;
   document.getElementById("epoverlay").classList.remove("show");
   document.getElementById("epmodal").classList.remove("show");
+}
+// 話チップのクリック。通常はその話のトグル。Shift+クリックでは起点(epAnchor)から
+// クリック話までの範囲を「起点の状態」に揃えてまとめて記録/解除する（一気見の範囲指定用）。
+function epChipClick(id, n, total, range) {
+  if (range && epAnchor > 0 && epAnchor !== n) {
+    const lo = Math.min(epAnchor, n), hi = Math.max(epAnchor, n);
+    const set = new Set(epsOf(id));
+    const mark = set.has(epAnchor);   // 起点が視聴済み→範囲を視聴済みに / 未視聴→範囲を解除
+    for (let i = lo; i <= hi; i++) { if (mark) set.add(i); else set.delete(i); }
+    commitEps(id, [...set], total);
+  } else {
+    toggleEp(id, n, total);
+  }
+  epAnchor = n;
 }
 function renderEpModal(id) {
   const a = catalog.find(x => x.id === id);
@@ -2154,9 +2178,9 @@ function renderEpModal(id) {
     for (let n = 1; n <= total; n++) {
       const noted = epNoteOf(id, n) ? " noted" : "";
       const dot = epNoteOf(id, n) ? '<span class="dot">●</span>' : "";
-      chips += `<button class="ep-chip ${eps.has(n) ? "on" : ""}${noted}" onclick="toggleEp(${id},${n},${total});afterEpChange(${id})">${n}${dot}</button>`;
+      chips += `<button class="ep-chip ${eps.has(n) ? "on" : ""}${noted}" onclick="epChipClick(${id},${n},${total},event.shiftKey);afterEpChange(${id})" oncontextmenu="epChipClick(${id},${n},${total},true);afterEpChange(${id});return false">${n}${dot}</button>`;
     }
-    grid = `<div class="ep-grid">${chips}</div>`;
+    grid = `<div class="ep-grid">${chips}</div><div class="ep-hint">💡 一気見した話は範囲でまとめて記録: 起点をクリック → 終点を右クリック（Shift+クリックでも可）</div>`;
   }
   const progRight = nx ? `　次: 第${nx}話` : (total && watched >= total ? "　🎉 完走" : "");
   const aLbl = airLabel(a);
