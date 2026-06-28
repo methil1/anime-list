@@ -5,13 +5,14 @@
 現状は「単一 HTML + ローカル JS + localStorage」の純クライアントサイド静的アプリ。
 Android アプリ化の王道は **①PWA として整える → ②Android ラッパーで包む** の2段階。
 
-### Phase 1: PWA 化（Android 化の前提・単体でも価値あり）
-- [ ] `manifest.webmanifest` を追加（name / short_name / start_url / display:standalone / theme_color / background_color / icons）
-- [ ] アプリアイコンを用意（192px / 512px / maskable）
-- [ ] `<meta name="theme-color">` と manifest リンクを `index.html` に追加
-- [ ] Service Worker を追加し、`index.html` / `anime-data.js`（約4.9MB）/ ポスター画像をキャッシュ → **オフライン起動**対応
-- [ ] iOS 用 `apple-touch-icon` も一応用意（任意）
-- [ ] Lighthouse の PWA 監査をパスさせる（installable 要件）
+### Phase 1: PWA 化（Android 化の前提・単体でも価値あり） ✅ 完了
+- [x] `manifest.webmanifest` を追加（name / short_name / start_url / display:standalone / theme_color / background_color / icons）
+- [x] アプリアイコンを用意（192px / 512px / maskable）→ `icons/`
+- [x] `<meta name="theme-color">` と manifest リンクを `index.html` に追加
+- [x] Service Worker を追加し、`index.html` / `anime-data.js`（約4.9MB）/ ポスター画像をキャッシュ → **オフライン起動**対応（`sw.js`）
+- [x] iOS 用 `apple-touch-icon` も用意
+- [x] installable 要件をブラウザ実機（Chromium）で確認 — SW active / manifest parse / standalone OK
+      ※ 正式な Lighthouse スコア計測は未実施（任意）
 
 ### Phase 2: Android ラッパー（どちらか選択）
 - [ ] **案A: TWA（Trusted Web Activity）** — Bubblewrap で GitHub Pages の PWA をそのまま包む。

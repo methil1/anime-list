@@ -2,8 +2,16 @@
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>アニメモ！</title>
+<meta name="description" content="アニメ視聴記録カタログ。クール別に作品を一覧し、ワンクリックで視聴状態を記録。">
+<meta name="theme-color" content="#0d0e12">
+<link rel="manifest" href="./manifest.webmanifest">
+<link rel="icon" type="image/png" href="./icons/icon-192.png">
+<link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="アニメモ">
 <style>
   :root {
     --bg: #0d0e12;
@@ -2282,6 +2290,14 @@ init();
 <script>
   // anime-data.js が後から読まれた場合に備えて再初期化
   if (window.ANIME_CATALOG && catalog.length === 0) init();
+</script>
+<script>
+  // Service Worker 登録（PWA / オフライン対応）。file:// では SW 非対応のため http(s) のみ。
+  if ("serviceWorker" in navigator && location.protocol.startsWith("http")) {
+    window.addEventListener("load", () => {
+      navigator.serviceWorker.register("./sw.js").catch(() => {});
+    });
+  }
 </script>
 </body>
 </html>
