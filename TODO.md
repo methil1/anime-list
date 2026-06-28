@@ -14,13 +14,19 @@ Android アプリ化の王道は **①PWA として整える → ②Android ラ�
 - [x] installable 要件をブラウザ実機（Chromium）で確認 — SW active / manifest parse / standalone OK
       ※ 正式な Lighthouse スコア計測は未実施（任意）
 
-### Phase 2: Android ラッパー（どちらか選択）
-- [ ] **案A: TWA（Trusted Web Activity）** — Bubblewrap で GitHub Pages の PWA をそのまま包む。
-      Play ストア配布が容易。URL バーなしの全画面。Phase 1 の PWA が必須。
-      `assetlinks.json`（Digital Asset Links）でドメイン検証が必要。
-- [ ] **案B: Capacitor** — Web 資産（index.html / anime-data.js）を APK に同梱。
-      完全オフライン・ネイティブ API 利用可。Android Studio でビルド。
-      ※ 純静的アプリなら案B が手軽でオフラインも強い。ストア審査も独立。
+### Phase 2: Android ラッパー → **案A: TWA を採用**
+- [x] TWA 設定一式をリポジトリに用意（`android/twa-manifest.json`・`android/assetlinks.json`）
+- [x] ビルド手順書を作成（`docs/android-twa.md`）
+- [x] `.gitignore` に Bubblewrap 成果物（鍵・apk・aab・gradle）を追加
+- [ ] **【要・手元環境】** `bubblewrap build` で `.aab`/`.apk` 生成（Node + JDK17 + Android SDK 必要）
+- [ ] **【要・別リポジトリ】** 署名鍵の SHA-256 を `assetlinks.json` に記入し、
+      `methil1.github.io` のルート（`/.well-known/assetlinks.json`）へ配置 → ドメイン検証
+- [ ] 実機で localStorage 永続化・オフライン起動・タッチ操作を確認
+
+> ⚠️ 重要: assetlinks はサブパス(`/anime-list/...`)ではなく**オリジン直下**
+> (`https://methil1.github.io/.well-known/assetlinks.json`) に置く必要がある。
+> ルートはユーザーページ用の別リポジトリ `methil1/methil1.github.io` が配信するため、
+> そちらに設置する。詳細は `docs/android-twa.md`。
 
 ### Phase 3: 仕上げ
 - [ ] アイコン / スプラッシュスクリーン
