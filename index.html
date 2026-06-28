@@ -334,6 +334,15 @@
   .poster .myrate { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: rgba(124,92,255,.25); color: var(--accent-soft); }
   .poster .score { position: absolute; top: 7px; left: 7px; background: rgba(8,9,12,.78); color: #fcd34d; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
   .poster .score.noscore { color: var(--text-faint); }
+  /* タッチ端末用 情報ボタン（ホバーできない端末でのみ表示） */
+  .poster .pinfo { display: none; position: absolute; top: 40px; right: 7px; z-index: 3;
+    width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong);
+    background: rgba(8,9,12,.82); color: var(--accent-soft); font-family: Georgia, "Times New Roman", serif;
+    font-style: italic; font-weight: 700; font-size: 16px; line-height: 1; cursor: pointer;
+    align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
+  .poster .pinfo:active { background: var(--accent); color: #fff; }
+  .info-card.pinned { pointer-events: auto; }
+  @media (hover: none) and (pointer: coarse) { .poster .pinfo { display: flex; } }
 
   /* empty / loading */
   .notice { text-align: center; padding: 80px 20px; color: var(--text-faint); }
@@ -1208,7 +1217,7 @@ function renderCalendar() {
     total += items.length;
     const dow = new Date(Date.UTC(calY, calM, day)).getUTCDay();
     const dcls = day === todayDate ? "" : (dow === 0 ? "sun" : dow === 6 ? "sat" : "");
-    const rows = items.map(s => `<div class="cal-item" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("");
+    const rows = items.map(s => `<div class="cal-item" onclick="pinInfo(event, ${s.a.id})" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("");
     cells += `<div class="cal-cell ${day === todayDate ? "today" : ""}"><div class="cal-date ${dcls}">${day}</div><div class="cal-items">${rows}</div></div>`;
   }
   const cc = currentCour();
@@ -1789,6 +1798,7 @@ function posterHtml(a, continuing) {
   return `<article class="poster ${st}${cmpClass}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : `<span class="score noscore">★-.-</span>`}
+    <button class="pinfo" type="button" onclick="pinInfo(event,${a.id})" aria-label="作品情報を表示">i</button>
     <span class="status">${statusIcon(st)}</span>
     <div class="meta">
       <div class="ttl">${esc(a.t)}</div>
@@ -2015,8 +2025,31 @@ function positionInfo(poster, card) {
   card.style.top = top + "px";
 }
 function hideInfo() {
+  if (infoPinned) return;   // ピン留め中は mouseleave で閉じない（外側タップ/再タップで閉じる）
   document.getElementById("infocard").classList.remove("show");
 }
+// タッチ端末向け: タップで情報カードをピン留め表示。再タップ/外側タップで閉じる。
+let infoPinned = false;
+function pinInfo(e, id) {
+  e.stopPropagation();        // ポスターの cycle を発火させない
+  const card = document.getElementById("infocard");
+  const anchor = (e.currentTarget.closest && e.currentTarget.closest(".poster")) || e.currentTarget;
+  if (infoPinned && String(card.dataset.pid) === String(id) && card.classList.contains("show")) {
+    infoPinned = false; hideInfo(); return;   // 同じ作品の再タップでトグル
+  }
+  infoPinned = false;          // showInfo→positionInfo を通常通り実行
+  showInfo({ currentTarget: anchor }, id);
+  card.dataset.pid = String(id);
+  card.classList.add("pinned");
+  infoPinned = true;
+}
+// ピン留め中の外側タップで閉じる
+document.addEventListener("click", (e) => {
+  if (!infoPinned) return;
+  const card = document.getElementById("infocard");
+  if (card.contains(e.target) || (e.target.closest && e.target.closest(".pinfo"))) return;
+  infoPinned = false; hideInfo();
+});
 
 /* ---------- Wikipedia ---------- */
 const WIKI_API = "https://ja.wikipedia.org/w/api.php?format=json&origin=*";
