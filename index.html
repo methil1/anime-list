@@ -514,6 +514,7 @@
   .info-card .ic-sv { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; white-space: nowrap; }
   .info-card .ic-narou { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-kakuyomu { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
+  .info-card .ic-mag { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-chars { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); display: grid; gap: 3px; }
   .info-card .ic-char { font-size: 0.81rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info-card .ic-cv { color: var(--accent-soft); }
@@ -2561,7 +2562,7 @@ function showInfo(e, id) {
   const noteRow = note ? `<div class="ic-note">📝 ${esc(note.length > 90 ? note.slice(0, 90) + "…" : note)}</div>` : "";
   card.innerHTML =
     `<div class="ic-title">${esc(a.t)}</div>` +
-    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}${a.kk ? ' <span class="ic-kakuyomu">カクヨム発</span>' : ""}</div>` : "") +
+    (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}${a.kk ? ' <span class="ic-kakuyomu">カクヨム発</span>' : ""}${a.mg ? ` <span class="ic-mag">${esc(a.mg)}</span>` : ""}</div>` : "") +
     (a.au ? `<div class="ic-row"><span class="ic-k">原作者</span>${esc(a.au)}</div>` : "") +
     (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(studioDisplay(a.st))}</div>` : "") +
     airRow +

@@ -27,6 +27,10 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
     python scrape_anime.py --kakuyomu   # 原作がライトノベル/Web小説/小説/その他の作品を カクヨム検索で
                                         #   タイトル照合し、カクヨム発の作品に kk=1 を付与（未判定分のみ）。
                                         #   なろう発(nr=1)と判定済みの作品はスキップ。--force で全件再判定。
+    python scrape_anime.py --magazine   # 原作が漫画(src=漫画)の作品に、原作漫画の連載誌系統(mg)を付与。
+                                        #   AniList relations で原作漫画の MAL ID を引き、Jikan の連載誌を
+                                        #   ジャンプ系/マガジン系/サンデー系/青年誌/少女・女性誌 等に正規化（未判定分のみ）。
+                                        #   --force で全件再判定。
 
 仕様:
   - TV/ショート: format TV / TV_SHORT を season/seasonYear（放送開始クール）ごとに取得。
@@ -1294,19 +1298,194 @@ def run_kakuyomu(force=False):
     print(f"\n完了: {len(todo)} 件中 {hits} 件をカクヨム発と判定しました（{OUT_PATH} 更新済み）。", flush=True)
 
 
+# ---------- 漫画雑誌（連載誌系統）判定 ----------
+# AniList の source は「漫画」までしか分からず連載誌が取れないため、原作漫画の MAL ID を
+# AniList relations 経由で取得し、Jikan(MAL) の serializations（連載誌名）を引いて系統ラベル化する。
+# 判定結果は出力レコードの mg フィールドに持つ:
+#   "ジャンプ系" 等の系統ラベル = 判定済み / 0 = 判定済み・連載誌不明（該当なし） / 無し = 未判定。
+JIKAN_MANGA_URL = "https://api.jikan.moe/v4/manga/{}/full"
+# 原作漫画の MAL ID を引く AniList relations クエリ（id_in で最大50件バッチ）。
+MANGA_REL_QUERY = (
+    "query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { id "
+    "relations { edges { relationType node { idMal type format countryOfOrigin } } } } } }"
+)
+# 原作漫画の発祥国 → 海外ラベル（連載誌より優先。韓国 webtoon / 中国漫画を区別）。
+OVERSEAS_COUNTRY = {"KR": "海外(韓国)", "CN": "海外(中国)", "TW": "海外(台湾)"}
+
+# Jikan の serializations 名（英字ロマ字）→ 日本語系統ラベルへの分類規則。
+# 上から順に評価し最初に一致したラベルを採用する。青年・少女系の派生（ヤング◯◯等）を
+# ブランド系（ジャンプ/マガジン/サンデー…）より先に判定するため順序が重要。
+MAGAZINE_RULES = [
+    # === 青年: ブランド派生（「ヤング◯◯」等。少年ブランドに落ちる前に判定）===
+    (r"young\s*jump|ultra\s*jump|grand\s*jump|business\s*jump|super\s*jump|miracle\s*jump|jump\s*x\b|tonari\s*no\s*young\s*jump", "ヤングジャンプ系"),
+    (r"young\s*magazine", "ヤングマガジン系"),
+    (r"young\s*sunday", "ビッグコミック系"),
+    (r"young\s*ace|comp\s*ace", "角川・電撃系"),
+    (r"young\s*gangan|big\s*gangan|young\s*champion|young\s*animal|young\s*king|young\s*guru|young\s*rose", "その他青年誌"),
+    # === 少年ブランド系 ===
+    (r"shounen\s*jump|shonen\s*jump|jump\s*sq|jump\s*square|\bv[\s\-]*jump\b|saikyou\s*jump|jump\s*giga|akamaru", "ジャンプ系"),
+    (r"shounen\s*magazine|shonen\s*magazine|magazine\s*(special|pocket|edge|great)|magazine\s*r\b|bessatsu\s*shounen\s*magazine", "マガジン系"),
+    (r"shounen\s*sunday|shonen\s*sunday|sunday\s*gx|sunday\s*s\b|\bgessan\b|club\s*sunday|ura\s*sunday|sunday\s*webry", "サンデー系"),
+    (r"champion", "チャンピオン系"),
+    (r"shounen\s*gangan|gangan\s*joker|gangan\s*online|g[\s\.]*fantasy|\bgangan\b", "ガンガン系"),
+    (r"shounen\s*ace|comic\s*blade|dragon\s*age|comic\s*rush|comic\s*gardo|comic\s*corona|monthly\s*shounen\s*ace", "少年エース系"),
+    # === 青年: 出版社レーベル ===
+    (r"\bmorning\b|afternoon|\bevening\b", "モーニング・アフタヌーン系"),
+    (r"big\s*comic|\bspirits\b|superior|\bikki\b|\bhibana\b", "ビッグコミック系"),
+    (r"dengeki\s*daioh|comic\s*alive|comic\s*flapper|comic\s*newtype|comic\s*gene\b|\bfebri\b|dragon\s*magazine|dengeki\s*maoh|comic\s*dragon|comic\s*dengeki|comic\s*walker", "角川・電撃系"),
+    (r"comic\s*beam|comic\s*ryu|\bharta\b|comic\s*zenon|comic\s*@?\s*bunch|kuragebunch|comic\s*earth\s*star|comic\s*gum|comic\s*cune|comic\s*rex|manga\s*action|manga\s*time|weekly\s*comic|comic\s*gotta|comic\s*tatan|\bgoten\b", "その他青年誌"),
+    # === 少女・女性誌（出版社レーベル）===
+    (r"\bribon\b|margaret|betsuma|\bcookie\b|cocohana|\bchorus\b", "りぼん・マーガレット系"),
+    (r"nakayoshi|\bdessert\b|be[\s\-]*love|\bkiss\b|\baria\b|\bitan\b|betsufure|bessatsu\s*friend", "なかよし・デザート系"),
+    (r"\bciao\b|sho[\s\-]*comi|betsucomi|petit\s*comic|\bflowers\b|\bcheese\b|pochette|shoujo\s*comic", "ちゃお・フラワー系"),
+    (r"hana\s*to\s*yume|\blala\b|\bmelody\b|bessatsu\s*hana", "花とゆめ・LaLa系"),
+    (r"feel\s*young|office\s*you|\byou\b|princess|elegance|for\s*mrs|zero[\s\-]*sum|\bjudy\b|comic\s*tint|\basuka\b|\bsylph\b", "女性・レディース誌"),
+    # === WEBコミック（印刷ブランド非紐付けのプラットフォーム）===
+    (r"\bpixiv\b|comico|niconico|\bganma\b|manga\s*box|web\s*comic|webcomic|alphapolis|manga\s*one|comic\s*days|comic\s*ride|comic\s*polaris|comic\s*meteor|comic\s*gamma|comic\s*newtype\s*web", "WEBコミック"),
+]
+MAGAZINE_RULES = [(re.compile(p, re.I), lab) for p, lab in MAGAZINE_RULES]
+
+# 分類規則に当たらなかった連載誌名を集計（実行末尾で表示し、規則拡充の手がかりにする）。
+_UNMATCHED_MAGAZINES = {}
+
+
+def classify_magazine(names):
+    """連載誌名（list[str]）を系統ラベルに分類。1つでも規則に当たればそのラベルを返す。
+    連載誌名はあるが規則未対応なら「その他誌」。names が空なら None（連載誌不明）。"""
+    if not names:
+        return None
+    for name in names:
+        for rx, label in MAGAZINE_RULES:
+            if rx.search(name):
+                return label
+    for name in names:  # 未対応誌の集計
+        _UNMATCHED_MAGAZINES[name] = _UNMATCHED_MAGAZINES.get(name, 0) + 1
+    return "その他誌"
+
+
+def jikan_manga_serializations(mal_id, retries=4):
+    """Jikan(MAL)から漫画の連載誌名リストを返す。連載誌が無ければ []、通信失敗は None。"""
+    req = urllib.request.Request(
+        JIKAN_MANGA_URL.format(mal_id),
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeCatalog/1.0"},
+    )
+    for _ in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            ser = (data.get("data") or {}).get("serializations") or []
+            return [s.get("name") for s in ser if s.get("name")]
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(int(e.headers.get("Retry-After", "2")) + 1)
+                continue
+            if e.code == 404:
+                return []
+            if e.code >= 500:
+                time.sleep(3)
+                continue
+            return None
+        except (urllib.error.URLError, ValueError):
+            time.sleep(3)
+            continue
+    return None
+
+
+def pick_source_manga(edges):
+    """relations edges から原作漫画ノードを1つ選ぶ。idMal を持つ MANGA ノードのうち
+    SOURCE > ADAPTATION > PARENT の順、同順位では単行本形式(MANGA/ONE_SHOT)を優先。無ければ None。
+    返り値は node dict（idMal / countryOfOrigin を含む）。"""
+    order = {"SOURCE": 0, "ADAPTATION": 1, "PARENT": 2}
+    cands = [
+        (order.get(e.get("relationType"), 9),
+         0 if (e.get("node") or {}).get("format") in ("MANGA", "ONE_SHOT") else 1,
+         e["node"])
+        for e in edges
+        if (e.get("node") or {}).get("type") == "MANGA" and (e.get("node") or {}).get("idMal")
+    ]
+    cands.sort(key=lambda c: (c[0], c[1]))
+    return cands[0][2] if cands else None
+
+
+def run_magazine(force=False, batch=50):
+    """既存カタログの漫画原作（src=漫画）作品に連載誌系統 mg を付与する。
+    AniList relations で原作漫画の MAL ID を引き、Jikan の連載誌から系統ラベル化。
+    未判定（mg 無し）のみ処理。force=True で全件再判定。バッチ毎チェックポイント保存あり。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime if a.get("src") == "漫画" and (force or "mg" not in a)]
+    print(f"漫画雑誌判定対象: {len(todo)} / 全 {len(anime)} 件", flush=True)
+    mag_cache = {}   # 原作漫画 MAL ID -> 系統ラベル/0（同一原作の続編で再取得を避ける）
+    done = hits = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(MANGA_REL_QUERY, {"ids": ids})
+        if "errors" in data or "data" not in data:
+            print(f"    AniList error: {data.get('errors')}", flush=True)
+            time.sleep(3)
+            continue  # バッチ取得失敗は未判定のまま次回へ
+        relmap = {
+            m["id"]: pick_source_manga((m.get("relations") or {}).get("edges") or [])
+            for m in data["data"]["Page"]["media"]
+        }
+        for aid in ids:
+            rec = by_id.get(aid)
+            if rec is None:
+                continue
+            node = relmap.get(aid)
+            if not node:
+                rec["mg"] = 0   # 原作漫画の MAL ID 不明＝連載誌たどれず（処理済み扱い）
+                done += 1
+                continue
+            # 韓国 webtoon / 中国漫画は連載誌でなく発祥国で判定（Jikan 照会は不要）。
+            overseas = OVERSEAS_COUNTRY.get(node.get("countryOfOrigin"))
+            if overseas:
+                rec["mg"] = overseas
+                done += 1
+                hits += 1
+                print(f"    {overseas}: {rec['t']}（{rec['y']}）", flush=True)
+                continue
+            mal = node["idMal"]
+            if mal in mag_cache:
+                res = mag_cache[mal]
+            else:
+                names = jikan_manga_serializations(mal)
+                if names is None:
+                    time.sleep(1.1)
+                    continue    # 通信失敗は未判定のまま次回へ
+                res = classify_magazine(names) or 0
+                mag_cache[mal] = res
+                time.sleep(1.1)   # Jikan: 約60req/分
+            rec["mg"] = res
+            done += 1
+            if res:
+                hits += 1
+                print(f"    {res}: {rec['t']}（{rec['y']}）", flush=True)
+        print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        write_catalog(anime)   # バッチ毎チェックポイント（中断対策）
+    if _UNMATCHED_MAGAZINES:
+        top = sorted(_UNMATCHED_MAGAZINES.items(), key=lambda kv: -kv[1])[:20]
+        print("\n未分類の連載誌（規則拡充候補）:", flush=True)
+        for name, c in top:
+            print(f"    {c:>4}  {name}", flush=True)
+    print(f"\n完了: {done} 件処理・うち {hits} 件に連載誌系統を付与しました（{OUT_PATH} 更新済み）。", flush=True)
+
+
 ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下限
 
 
 def run_update():
     """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA に加え、
     人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。
-    最後に新規追加分（nr/kk 未判定）のなろう・カクヨム原作判定も行う。"""
+    最後に新規追加分（nr/kk/mg 未判定）のなろう・カクヨム・漫画雑誌判定も行う。"""
     cur = date.today().year
     print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
     run_ona_jp_merge(ONA_JP_FLOOR)
     run_narou()
     run_kakuyomu()
+    run_magazine()
 
 
 def run_full(start_year):
@@ -1371,6 +1550,8 @@ def main():
         run_narou(force="--force" in args)
     elif args and args[0] == "--kakuyomu":
         run_kakuyomu(force="--force" in args)
+    elif args and args[0] == "--magazine":
+        run_magazine(force="--force" in args)
     elif args and args[0] == "--ona-jp":
         floor = int(args[1]) if len(args) > 1 else 2000
         run_ona_jp_merge(floor)
