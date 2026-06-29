@@ -4,6 +4,7 @@ auto_update.log
 dates_backfill.log
 broadcast_backfill.log
 prime_backfill.log
+stream_backfill.log
 authors_backfill.log
 
 # Bubblewrap / TWA ビルド成果物（鍵・生成プロジェクトはコミットしない）

@@ -117,6 +117,8 @@
   .stat.maybe .num { color: var(--maybe); }
   .stat.dropped .num { color: var(--dropped); }
   .stat.planning .num { color: var(--planning); }
+  .stat.eps .num { color: var(--accent-soft); }
+  .stat.time .num { color: var(--accent-soft); font-size: 1.35rem; }
   .collection-bar { margin-top: 22px; display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
   body.hide-scores .poster .score { display: none; }
 
@@ -418,18 +420,105 @@
   .ctx-menu .ctx-ep { display: flex; align-items: center; gap: 6px; padding: 3px 10px 8px; font-size: 0.78rem; color: var(--text-dim); }
   .ctx-menu .ctx-ep input { width: 60px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 6px; font-family: inherit; font-size: 0.82rem; }
   .ctx-menu .ctx-divider { height: 1px; background: var(--border); margin: 5px 4px; }
+  /* 話数記録モーダル（エピソード単位） */
+  .ep-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.6); display: none; }
+  .ep-overlay.show { display: block; }
+  .ep-modal { position: fixed; z-index: 81; left: 50%; top: 50%; transform: translate(-50%,-50%);
+    width: min(440px, calc(100vw - 32px)); max-height: min(80vh, 640px); overflow: auto;
+    background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
+    box-shadow: 0 24px 60px -16px rgba(0,0,0,.85); padding: 16px 18px 18px; display: none; }
+  .ep-modal.show { display: block; }
+  .ep-modal .ep-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
+  .ep-modal .ep-ttl { font-size: 0.98rem; font-weight: 700; color: var(--text); line-height: 1.3; flex: 1; }
+  .ep-modal .ep-close { flex: 0 0 auto; background: none; border: none; color: var(--text-faint); font-size: 1.4rem; line-height: 1; cursor: pointer; padding: 0 2px; }
+  .ep-modal .ep-close:hover { color: var(--text); }
+  .ep-modal .ep-prog { font-size: 0.84rem; color: var(--text-dim); margin-bottom: 12px; }
+  .ep-modal .ep-prog b { color: var(--accent-soft); font-variant-numeric: tabular-nums; }
+  .ep-modal .ep-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(40px, 1fr)); gap: 6px; margin-bottom: 12px; }
+  .ep-modal .ep-chip { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
+    border-radius: 7px; padding: 7px 0; font-family: inherit; font-size: 0.82rem; cursor: pointer; font-variant-numeric: tabular-nums; transition: background .1s, border-color .1s; }
+  .ep-modal .ep-chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .ep-modal .ep-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ep-modal .ep-hint { font-size: 0.72rem; color: var(--text-faint); margin: -6px 0 12px; }
+  .ep-modal .ep-upto { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 12px; }
+  .ep-modal .ep-upto input { width: 64px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 7px; font-family: inherit; font-size: 0.85rem; }
+  .ep-modal .ep-actions { display: flex; gap: 8px; }
+  .ep-modal .ep-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 7px; padding: 7px 14px; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .ep-modal .ep-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+  .ep-modal .ep-btn.ghost { background: transparent; color: var(--text-faint); border-color: var(--border); font-weight: 500; }
+  .ep-modal .ep-btn.ghost:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-elev); }
+  /* 感想（テキスト記録） */
+  #noteoverlay { z-index: 90; }
+  .ep-modal.note-modal { z-index: 91; }
+  .ep-modal .ep-seclabel { font-size: 0.76rem; color: var(--text-faint); font-weight: 700; letter-spacing: 0.04em; margin: 4px 0 6px; }
+  .ep-modal .ep-note { width: 100%; min-height: 120px; resize: vertical; box-sizing: border-box;
+    background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
+    padding: 9px 11px; font-family: inherit; font-size: 0.88rem; line-height: 1.55; margin-bottom: 12px; }
+  .ep-modal .ep-note:focus { outline: none; border-color: var(--accent); }
+  .ep-modal .ep-chip.noted { box-shadow: inset 0 0 0 1px var(--accent-soft); }
+  .ep-modal .ep-chip .dot { color: var(--accent-soft); font-size: 0.62rem; }
+  .ep-modal .ep-chip.on .dot { color: #fff; }
+  .ep-modal .epc { margin: 0 0 12px; }
+  .ep-modal .epc-lbl { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 5px; }
+  .ep-modal .epc-lbl b { color: var(--accent-soft); }
+  .ep-modal .epc input { width: 100%; box-sizing: border-box; background: var(--bg-elev); border: 1px solid var(--border);
+    color: var(--text); border-radius: 7px; padding: 7px 9px; font-family: inherit; font-size: 0.85rem; }
+  .ep-modal .epc input:focus { outline: none; border-color: var(--accent); }
+  /* 視聴タイムライン */
+  .tl-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; flex-wrap: wrap; }
+  .tl-title { font-size: 1.05rem; font-weight: 700; color: var(--text); }
+  .tl-count { color: var(--text-faint); font-size: 0.82rem; font-weight: 500; margin-left: 6px; }
+  .tl-clear { background: transparent; border: 1px solid var(--border); color: var(--text-faint); border-radius: 7px;
+    padding: 6px 12px; font-family: inherit; font-size: 0.78rem; cursor: pointer; }
+  .tl-clear:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-elev); }
+  .tl-day { font-size: 0.82rem; font-weight: 700; color: var(--accent-soft); letter-spacing: 0.03em;
+    margin: 18px 0 9px; padding-bottom: 5px; border-bottom: 1px solid var(--border); }
+  .tl-day:first-of-type { margin-top: 0; }
+  .tl-list { display: flex; flex-direction: column; gap: 7px; }
+  .tl-item { display: flex; align-items: center; gap: 11px; background: var(--bg-card); border: 1px solid var(--border);
+    border-radius: 9px; padding: 7px 10px 7px 7px; }
+  .tl-item:hover { border-color: var(--border-strong); }
+  .tl-thumb { width: 34px; height: 48px; object-fit: cover; border-radius: 5px; flex: 0 0 auto; cursor: pointer; background: var(--bg-elev); }
+  .tl-noimg { display: block; }
+  .tl-body { flex: 1; min-width: 0; cursor: pointer; }
+  .tl-name { font-size: 0.88rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .tl-what { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
+  .tl-time { font-size: 0.78rem; color: var(--text-faint); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
+  .tl-del { background: none; border: none; color: var(--text-faint); font-size: 0.9rem; cursor: pointer; flex: 0 0 auto; padding: 2px 4px; line-height: 1; }
+  .tl-del:hover { color: var(--danger, #f87171); }
+  /* マイページ「次に見る」キュー */
+  .nextup { margin-bottom: 22px; }
+  .nextup-head { font-size: 1.05rem; font-weight: 800; color: var(--accent-soft);
+    background: rgba(124,92,255,.12); padding: 9px 16px; border-radius: 12px; border-left: 4px solid var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+  .nextup-head .count { color: var(--text-faint); font-size: 0.82rem; font-weight: 600; }
+  .nextup-grid { display: flex; flex-wrap: wrap; gap: 14px; }
+  .nextup-card { width: 150px; }
+  .nextup-card .nextup-info { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
+  .nextup-card .nextup-next { font-size: 0.78rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
+  .nextup-card .nextup-next b { color: var(--accent-soft); }
+  .nextup-card .nextup-btn { flex: 0 0 auto; background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 0.74rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .nextup-card .nextup-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
+  .nextup-card .nextup-wait { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-faint); white-space: nowrap; }
+  /* 放送状態バッジ（作品単位）: airing=赤系 / upcoming=淡色 */
+  .air-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }
+  .air-badge.airing { color: #fff; background: #f87171; }
+  .air-badge.upcoming { color: var(--text-dim); background: var(--bg-elev); border: 1px solid var(--border-strong); }
+  .poster .prog.upcoming { color: var(--text-faint); }
   /* ホバー情報カード（作品名/原作/制作/メインキャラ） */
   .info-card { position: fixed; z-index: 65; min-width: 200px; max-width: 300px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 16px 40px -12px rgba(0,0,0,.85); padding: 11px 13px; display: none; pointer-events: none; }
   .info-card.show { display: block; }
   .info-card .ic-title { font-size: 0.9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: 7px; }
   .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
   .info-card .ic-k { flex: 0 0 auto; color: var(--text-faint); }
+  .info-card .ic-svs { display: flex; flex-wrap: wrap; gap: 4px; }
+  .info-card .ic-sv { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; white-space: nowrap; }
   .info-card .ic-narou { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-kakuyomu { color: var(--accent-soft); font-size: 0.7rem; border: 1px solid var(--border-strong); padding: 0 6px; border-radius: 999px; align-self: center; }
   .info-card .ic-chars { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); display: grid; gap: 3px; }
   .info-card .ic-char { font-size: 0.81rem; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .info-card .ic-cv { color: var(--accent-soft); }
   .info-card .ic-more { color: var(--text-faint); }
+  .info-card .ic-note { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); font-size: 0.79rem; color: var(--text-dim); line-height: 1.5; }
 </style>
 </head>
 <body>
@@ -443,6 +532,7 @@
     <nav class="rail-views">
       <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
       <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
+      <button class="ytab collection" id="timeline-btn" onclick="goTimeline()">🕒 タイムライン</button>
     </nav>
 
     <div class="rail-group">
@@ -514,9 +604,15 @@
 <div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
 <div class="cal-overlay" id="cal-overlay" onclick="if(event.target===this)closeCalendar()"></div>
+<div class="ep-overlay" id="epoverlay" onclick="closeEpModal()"></div>
+<div class="ep-modal" id="epmodal" role="dialog" aria-modal="true"></div>
+<div class="ep-overlay" id="noteoverlay" onclick="closeNoteModal()"></div>
+<div class="ep-modal note-modal" id="notemodal" role="dialog" aria-modal="true"></div>
 
 <script>
 const WATCH_KEY = "animeTV.watch.v1";
+const HISTORY_KEY = "animeTV.history.v1"; // 視聴タイムライン（履歴ログ）。配列 [{id, ep, t}]、ep=0は作品単位
+const HISTORY_MAX = 5000;                 // 履歴の上限件数（肥大化防止）
 const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
 const COMPARE_KEY = "animeTV.compare.v1"; // 比較相手の視聴データ { name, watch:{id:{s,ep,r}}, importedAt }
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
@@ -541,10 +637,11 @@ const FORMAT_KEYS = ["TV", "SHORT", "OVA", "MOVIE"];
 let catalog = [];
 let years = [];
 let watch = loadWatch();
+let history = loadHistory();   // 視聴タイムライン（新着順の配列 [{id, ep, t}]）
 let series = loadSeries();   // シリーズ単位の「見たい」/「興味なし」 { want:{key:1}, hide:{key:-2} }
 let compare = loadCompare(); // 比較相手の視聴データ（null か {name, watch, importedAt}）
 let compareCat = "all";      // 比較ビューの絞り込み: "all" | "both"(共通) | "mine"(自分のみ) | "theirs"(相手のみ)
-let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare"
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare" | "timeline"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
@@ -610,7 +707,16 @@ function migrateWatch(raw) {
       if (v.s && v.s !== "unwatched") e.s = v.s;
       if (v.ep > 0) e.ep = v.ep;
       if (v.r > 0) e.r = v.r;
-      if (e.s || e.r) out[id] = e;
+      if (v.x) e.x = v.x;
+      if (Array.isArray(v.eps)) { const e2 = [...new Set(v.eps.filter(n => n > 0))].sort((a, b) => a - b); if (e2.length) { e.eps = e2; e.ep = e2.length; } }
+      else if (v.ep > 0) { const e2 = []; for (let i = 1; i <= v.ep; i++) e2.push(i); e.eps = e2; e.ep = v.ep; }   // 話別記録(eps)導入前のカウントのみ記録を [1..ep] に移行
+      if (typeof v.n === "string" && v.n.trim()) e.n = v.n;
+      if (v.en && typeof v.en === "object" && !Array.isArray(v.en)) {
+        const en = {};
+        for (const k in v.en) { const c = v.en[k]; if (k > 0 && typeof c === "string" && c.trim()) en[k] = c; }
+        if (Object.keys(en).length) e.en = en;
+      }
+      if (e.s || e.r || e.x || e.eps || e.n || e.en) out[id] = e;
     }
   }
   return out;
@@ -624,40 +730,133 @@ function saveWatch() {
   try { localStorage.setItem(WATCH_KEY, JSON.stringify(watch)); }
   catch (e) { alert("保存に失敗: " + e.message); }
 }
+
+/* ---------- 視聴タイムライン（履歴ログ） ---------- */
+// 履歴は新着順の配列。各要素 { id:作品ID, ep:話番号(0=作品単位), t:ISO日時 }。
+function loadHistory() {
+  try {
+    const r = localStorage.getItem(HISTORY_KEY);
+    if (r) { const a = JSON.parse(r); if (Array.isArray(a)) return a.filter(e => e && e.id != null && e.t); }
+  } catch (e) { console.error(e); }
+  return [];
+}
+function saveHistory() {
+  try { if (history.length > HISTORY_MAX) history = history.slice(0, HISTORY_MAX); localStorage.setItem(HISTORY_KEY, JSON.stringify(history)); }
+  catch (e) { console.error(e); }
+}
+// 視聴イベントを履歴の先頭へ追加（新規視聴時のみ呼ばれる）。
+function pushHistory(id, ep) {
+  history.unshift({ id, ep: ep || 0, t: new Date().toISOString() });
+  saveHistory();
+}
 function statusOf(id) { return (watch[id] && watch[id].s) || "unwatched"; }
-function epOf(id) { return (watch[id] && watch[id].ep) || 0; }
+// 視聴済み話数（表示・CSV用のカウント）。eps があれば eps.length を優先。
+function epOf(id) { const w = watch[id]; if (!w) return 0; return Array.isArray(w.eps) ? w.eps.length : (w.ep || 0); }
 function ratingOf(id) { return (watch[id] && watch[id].r) || 0; }
+// 作品ごとの感想テキスト / 各話の一言コメント。
+function noteOf(id) { return (watch[id] && watch[id].n) || ""; }
+function epNoteOf(id, n) { const en = watch[id] && watch[id].en; return (en && en[n]) || ""; }
+// 作品の感想を設定（空文字で削除）。再描画は呼び出し側。
+function setNote(id, text) {
+  const cur = watch[id] || {};
+  const t = (text || "").trim();
+  if (t) cur.n = t; else delete cur.n;
+  if (cur.s || cur.r || cur.x || cur.n || cur.en) watch[id] = cur; else delete watch[id];
+  saveWatch();
+}
+// 各話の一言コメントを設定（空文字でキー削除、マップ空なら en ごと削除）。
+function setEpNote(id, n, text) {
+  const cur = watch[id] || {};
+  const en = cur.en || {};
+  const t = (text || "").trim();
+  if (t) en[n] = t; else delete en[n];
+  if (Object.keys(en).length) cur.en = en; else delete cur.en;
+  if (cur.s || cur.r || cur.x || cur.n || cur.en || (Array.isArray(cur.eps) && cur.eps.length)) watch[id] = cur; else delete watch[id];
+  saveWatch();
+}
+
+/* ---------- エピソード単位の視聴記録（eps = 視聴済み話番号の昇順int配列, 1始まり） ---------- */
+function epsOf(id) { const e = watch[id] && watch[id].eps; return Array.isArray(e) ? e : []; }
+// total(総話数) が分かるとき、未視聴の最小話番号を返す。全話済み/total不明なら null。
+function nextEp(id, total) {
+  if (!(total > 0)) return null;
+  const set = new Set(epsOf(id));
+  for (let n = 1; n <= total; n++) if (!set.has(n)) return n;
+  return null;
+}
+// eps を書き込み、状態を自動調整して保存する共通処理。
+function commitEps(id, arr, total) {
+  const eps = [...new Set(arr.filter(n => n > 0))].sort((a, b) => a - b);
+  const cur = watch[id] || {};
+  // 新規に追加された話番号を視聴履歴(タイムライン)へ記録（削除では記録しない）。
+  const prev = new Set(Array.isArray(cur.eps) ? cur.eps : []);
+  for (const n of eps) if (!prev.has(n)) pushHistory(id, n);
+  const e = {};
+  if (cur.r > 0) e.r = cur.r;
+  if (cur.x) e.x = cur.x;
+  if (cur.n) e.n = cur.n;
+  if (cur.en) e.en = cur.en;
+  if (eps.length) {
+    e.eps = eps; e.ep = eps.length;
+    if (total > 0 && eps.length >= total) e.s = "done";
+    else if (cur.s === "dropped") e.s = "dropped";   // 中止状態は維持
+    else e.s = "watching";
+  } else {
+    // 全解除: 進捗を消すが視聴状態(視聴予定/多分等)・評価・除外は保持。watching/done/dropped は未マークへ。
+    if (cur.s && cur.s !== "watching" && cur.s !== "done" && cur.s !== "dropped") e.s = cur.s;
+  }
+  if (e.s || e.r || e.x || e.eps || e.n || e.en) watch[id] = e; else delete watch[id];
+  saveWatch();
+}
+function toggleEp(id, n, total) {
+  const set = new Set(epsOf(id));
+  if (set.has(n)) set.delete(n); else set.add(n);
+  commitEps(id, [...set], total);
+}
+function markUpTo(id, n, total) {
+  const arr = [];
+  for (let i = 1; i <= n; i++) arr.push(i);
+  commitEps(id, arr, total);
+}
+function markAllEps(id, total) { if (total > 0) markUpTo(id, total, total); }
+function clearEps(id) { commitEps(id, [], 0); }
 // おすすめ除外フラグ（「興味なし／見る予定なし」）。視聴状態・評価とは独立に持つ。
 function isHidden(id) { return !!(watch[id] && watch[id].x); }
 
 // 状態を設定。unwatched は状態を消すが自分評価は保持する。
 function setStatus(id, status, ep) {
   const cur = watch[id] || {};
+  // 話別記録の無い作品（劇場等）を新たに「視聴済」にした時は作品単位イベントを履歴へ。
+  if (status === "done" && cur.s !== "done" && !(Array.isArray(cur.eps) && cur.eps.length)) pushHistory(id, 0);
   const e = {};
   if (cur.r > 0) e.r = cur.r;
   if (cur.x) e.x = cur.x;   // おすすめ除外フラグは状態変更でも維持
+  if (cur.n) e.n = cur.n;
+  if (cur.en) e.en = cur.en;
   if (status && status !== "unwatched") {
     e.s = status;
-    if ((status === "watching" || status === "dropped") && ep > 0) e.ep = ep;
+    // 話別記録(eps)があれば状態変更でも引き継ぐ。無ければ従来のカウントを保持。
+    if (Array.isArray(cur.eps) && cur.eps.length) { e.eps = cur.eps; e.ep = cur.eps.length; }
+    else if ((status === "watching" || status === "dropped") && ep > 0) e.ep = ep;
   }
-  if (e.s || e.r || e.x) watch[id] = e; else delete watch[id];
+  // status === "unwatched": eps/ep を引き継がない（未マークで進捗もクリア）
+  if (e.s || e.r || e.x || e.eps || e.n || e.en) watch[id] = e; else delete watch[id];
   saveWatch();
   renderContextPanel();   // 傾向グラフを最新の視聴状態で更新
 }
-// 視聴話数（視聴中/視聴中止のみ保持）。
+// 「ここまで見た: N話」入力。eps=[1..N] に正規化（markUpTo 経由で状態も自動調整）。再描画は呼び出し側。
 function setEp(id, val) {
-  const cur = watch[id]; if (!cur || (cur.s !== "watching" && cur.s !== "dropped")) return;
+  const a = catalog.find(x => x.id === id);
+  const total = (a && a.ep) ? a.ep : 0;
   const n = parseInt(val, 10);
-  if (n > 0) cur.ep = n; else delete cur.ep;
-  saveWatch();
-  renderStats(); updatePoster(id);
+  if (n > 0) markUpTo(id, n, total); else clearEps(id);
 }
 
 // 自分評価（1-5。同じ星を再クリックで解除）。
 function setRating(id, r) {
   const cur = watch[id] || {};
   if (r > 0) cur.r = r; else delete cur.r;
-  if (cur.s || cur.r || cur.x) watch[id] = cur; else delete watch[id];
+  if (cur.s || cur.r || cur.x || cur.n || cur.en) watch[id] = cur; else delete watch[id];
   saveWatch();
   renderContextPanel();   // 評価タブの傾向グラフを更新
 }
@@ -665,7 +864,7 @@ function setRating(id, r) {
 function toggleHidden(id) {
   const cur = watch[id] || {};
   if (cur.x) delete cur.x; else cur.x = 1;
-  if (cur.s || cur.r || cur.x) watch[id] = cur; else delete watch[id];
+  if (cur.s || cur.r || cur.x || cur.n || cur.en) watch[id] = cur; else delete watch[id];
   saveWatch();
 }
 
@@ -763,6 +962,19 @@ function courCount(ep) {
   if (ep > 52) return 99;
   if (ep > 13) return Math.max(2, Math.round(ep / 13));
   return 1;
+}
+// 連続2〜3クール作品 a の放送期間が cour cc を含むか（開始クール自身も含む）。長期(>52話)・1クールは対象外。
+function airsCourSpan(a, cc) {
+  if (a.f !== "TV" && a.f !== "SHORT") return false;
+  if (!SEASON_CAL.includes(a.s)) return false;
+  const k = courCount(a.ep);
+  if (k < 2 || k >= 4) return false;
+  let yi = a.y, si = SEASON_CAL.indexOf(a.s);
+  for (let n = 0; n < k; n++) {
+    if (yi === cc.year && SEASON_CAL[si] === cc.season) return true;
+    si++; if (si > 3) { si = 0; yi++; }
+  }
+  return false;
 }
 // 現クール cc に「継続放送中」として複製表示すべき作品（開始クールは別）を返す。
 // 対象: TV/ショートのクール作品で 2〜3クール（1クールは継続なし／4クール以上=長期は除外）、
@@ -878,6 +1090,8 @@ function renderYearbar() {
   if (rb) { rb.style.display = view.mode === "year" ? "" : "none"; rb.classList.toggle("active", view.mode === "recent"); }
   const rcb = document.getElementById("reco-btn");
   if (rcb) rcb.classList.toggle("active", view.mode === "reco");
+  const tlb = document.getElementById("timeline-btn");
+  if (tlb) tlb.classList.toggle("active", view.mode === "timeline");
   const sb = document.getElementById("series-btn");   // 見たいシリーズは TOP（年別）では出さず、おすすめ／見たいシリーズ表示時のみ
   if (sb) { sb.style.display = (view.mode === "reco" || view.mode === "series") ? "" : "none"; sb.classList.toggle("active", view.mode === "series"); }
   const pb = document.getElementById("compare-btn");   // 比較相手読込済みなら名前入りラベルに
@@ -892,6 +1106,7 @@ function collectionSortBar() {
   return `<div class="cp-tabs collection-sort">${t("season", "クール別")}${t("rating", "自己評価順")}</div>`;
 }
 function goReco() { navigate(() => { view = { mode: "reco", year: null }; recoShowHidden = false; recoShowSeriesHidden = false; query = ""; document.getElementById("search").value = ""; }); }
+function goTimeline() { navigate(() => { view = { mode: "timeline", year: null }; query = ""; document.getElementById("search").value = ""; }); }
 function goSeries() { navigate(() => { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; }); }
 // 視聴比較ビューへ。比較相手データが無ければインポートを促す。
 function goCompare() {
@@ -1088,15 +1303,39 @@ function passStatus(a) {
 }
 
 /* ---------- stats ---------- */
+// 視聴時間(分)を「◯分 / ◯時間 / ◯日◯時間」に整形。
+function fmtWatchTime(min) {
+  if (!min) return "0分";
+  const h = Math.floor(min / 60);
+  if (h < 1) return `${min}分`;
+  if (h < 48) return `${h}時間`;
+  return `${Math.floor(h / 24)}日${h % 24}時間`;
+}
 function renderStats() {
   let done = 0, watching = 0, maybe = 0, dropped = 0, planning = 0;
-  for (const id in watch) { const v = (watch[id] || {}).s; if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; else if (v === "dropped") dropped++; else if (v === "planning") planning++; }
+  let totalEps = 0, movieDone = 0;
+  for (const id in watch) {
+    const v = (watch[id] || {}).s;
+    if (v === "done") done++; else if (v === "watching") watching++; else if (v === "maybe") maybe++; else if (v === "dropped") dropped++; else if (v === "planning") planning++;
+    // 視聴話数は「視聴済」=全話(a.ep)、「視聴中」=記録した進捗(epOf)を加算。
+    // 旧データ（話数記録なしで視聴済にしたもの）も視聴済なら全話として計上する。
+    const a = catalog.find(x => x.id === +id);
+    if (v === "done") {
+      if (a && a.f === "MOVIE") movieDone++;
+      else totalEps += (a && a.ep) ? a.ep : epOf(id);
+    } else if (v === "watching") {
+      totalEps += epOf(id);
+    }
+  }
+  const watchMin = totalEps * 24 + movieDone * 120;   // TV/話=24分概算、劇場=120分概算
   document.getElementById("stats").innerHTML = `
     <div class="stat done"><span class="num">${done}</span><span class="lbl">視聴済</span></div>
     <div class="stat watching"><span class="num">${watching}</span><span class="lbl">視聴中</span></div>
     <div class="stat planning"><span class="num">${planning}</span><span class="lbl">視聴予定</span></div>
     <div class="stat dropped"><span class="num">${dropped}</span><span class="lbl">視聴中止</span></div>
-    <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>`;
+    <div class="stat maybe"><span class="num">${maybe}</span><span class="lbl">多分視聴済</span></div>
+    <div class="stat eps"><span class="num">${totalEps.toLocaleString()}</span><span class="lbl">視聴話数</span></div>
+    <div class="stat time"><span class="num">${fmtWatchTime(watchMin)}</span><span class="lbl">視聴時間</span></div>`;
   const tc = document.getElementById("catalog-total");
   if (tc) tc.textContent = catalog.length.toLocaleString();
 }
@@ -1118,6 +1357,27 @@ function airSlot(a) {
     return { day: a.bc[0], mins: mt ? (+mt[1] * 60 + +mt[2]) : 1e9, time: t || "--:--" };
   }
   return null;
+}
+// 作品の放送状態を判定: "upcoming"(放送開始前) / "airing"(放送中) / "finished"(完結) / null(不明)。
+// d(YYYYMMDD放送開始)・air(次回放送 airingAt, Unix秒)・現クールから推定。エピソード単位ではなく作品単位。
+function airStatus(a) {
+  if (!a || !a.d) return null;
+  const now = new Date();
+  const todayInt = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
+  const startInt = a.d % 100 === 0 ? a.d + 1 : a.d;   // 日不明(月初粒度)は月初扱い
+  if (startInt > todayInt) return "upcoming";
+  if (a.air && a.air * 1000 > now.getTime()) return "airing";   // 次回放送が未来＝放送中
+  const cc = currentCour();
+  if ((a.f === "TV" || a.f === "SHORT") && a.y === cc.year && a.s === cc.season) return "airing";
+  if (airsCourSpan(a, cc)) return "airing";   // 連続2〜3クールが現クールに跨る（開始クールが前期で air が古い場合）
+  return "finished";
+}
+// 放送状態のバッジ文言。airing/upcoming のみ文字を返す（finished/null は空）。
+function airLabel(a) {
+  const s = airStatus(a);
+  if (s === "upcoming") return `📅 ${fmtDateInt(a.d)} 放送開始`;
+  if (s === "airing") return "🔴 放送中";
+  return "";
 }
 // 現クール放送中の作品（開始クール作品＋別クール開始の継続作品）を重複排除して返す。
 function currentlyAiring() {
@@ -1319,6 +1579,7 @@ function render() {
   const sortBar = (view.mode === "collection" && !query) ? collectionSortBar() : "";   // マイページのクール別/自己評価順トグル
 
   if (view.mode === "recent" && !query) { renderRecent(list); return; }
+  if (view.mode === "timeline" && !query) { renderTimeline(list); return; }
   if (view.mode === "reco" && !query) { renderReco(list); return; }
   if (view.mode === "series" && !query) { renderSeriesWant(list); return; }
   if (view.mode === "compare" && !query) { renderCompare(list); return; }
@@ -1358,7 +1619,7 @@ function render() {
     const ys = Object.keys(byYear).map(Number).sort((x, y) => y - x);
     const isCollection = view.mode === "collection";
     if (isCollection) {
-      list.innerHTML = sortBar + decadeGroupsHtml(items);   // 年代→年→クールで階層表示（折りたたみ可）
+      list.innerHTML = sortBar + nextUpHtml() + decadeGroupsHtml(items);   // 先頭に「次に見る」キュー + 年代→年→クール階層
     } else {
       list.innerHTML = ys.map(y => yearBlockHtml(y, byYear[y], false)).join("");
     }
@@ -1488,6 +1749,68 @@ function renderRecent(list) {
     return;
   }
   list.innerHTML = recentGroupsHtml(items);   // 追加日（更新日）→年代→年→クールで階層表示
+}
+
+/* ---------- 視聴タイムライン（履歴ログ） ----------
+   history（新着順 [{id, ep, t}]）を視聴日ごとにグルーピングして表示。今後の視聴のみ自動記録。 */
+const TL_WD = ["日", "月", "火", "水", "木", "金", "土"];
+function tlPad(n) { return String(n).padStart(2, "0"); }
+function tlDayLabel(d) { return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日 (${TL_WD[d.getDay()]})`; }
+// タイムラインの行クリック: TV系は話数モーダル、劇場は感想モーダルを開く。
+function tlOpen(id) {
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  if (a.f === "MOVIE") openNoteModal(id); else openEpModal(id);
+}
+function deleteHistoryAt(i) {
+  if (i < 0 || i >= history.length) return;
+  history.splice(i, 1);
+  saveHistory();
+  render();
+}
+function clearHistory() {
+  if (!history.length) return;
+  if (!confirm("視聴タイムラインの履歴をすべて削除します。よろしいですか？（視聴状態・評価・感想は消えません）")) return;
+  history = [];
+  saveHistory();
+  render();
+}
+function renderTimeline(list) {
+  if (!history.length) {
+    list.innerHTML = `<div class="notice"><div class="big">🕒</div><p>まだ視聴記録がありません。<br>話数を記録したり作品を視聴済にすると、ここに日付順で残ります。</p></div>`;
+    return;
+  }
+  // 新着順のまま視聴日（ローカル日付）でグルーピング。
+  const groups = [];
+  const idx = {};
+  history.forEach((ev, i) => {
+    const dt = new Date(ev.t);
+    if (isNaN(dt.getTime())) return;
+    const key = `${dt.getFullYear()}-${dt.getMonth()}-${dt.getDate()}`;
+    if (!(key in idx)) { idx[key] = groups.length; groups.push({ dt, evs: [] }); }
+    groups[idx[key]].evs.push({ ev, i });
+  });
+  let html = `<div class="tl-head"><div class="tl-title">🕒 視聴タイムライン<span class="tl-count">${history.length}件</span></div>`
+    + `<button class="tl-clear" onclick="clearHistory()">履歴をクリア</button></div>`;
+  for (const g of groups) {
+    html += `<div class="tl-day">${tlDayLabel(g.dt)}</div><div class="tl-list">`;
+    for (const { ev, i } of g.evs) {
+      const a = catalog.find(x => x.id === ev.id);
+      const t = new Date(ev.t);
+      const hm = `${tlPad(t.getHours())}:${tlPad(t.getMinutes())}`;
+      const title = a ? a.t : `作品 #${ev.id}`;
+      const thumb = a && a.img
+        ? `<img class="tl-thumb" src="${a.img}" alt="" loading="lazy" onclick="tlOpen(${ev.id})">`
+        : `<div class="tl-thumb tl-noimg"></div>`;
+      const what = ev.ep > 0 ? `第${ev.ep}話を見た` : "視聴済にした";
+      html += `<div class="tl-item">${thumb}`
+        + `<div class="tl-body" onclick="tlOpen(${ev.id})"><div class="tl-name">${esc(title)}</div><div class="tl-what">${what}</div></div>`
+        + `<div class="tl-time">${hm}</div>`
+        + `<button class="tl-del" title="この記録を削除" onclick="deleteHistoryAt(${i})">✕</button></div>`;
+    }
+    html += `</div>`;
+  }
+  list.innerHTML = html;
 }
 
 /* ---------- おすすめ（レコメンド） ----------
@@ -1774,8 +2097,10 @@ function posterHtml(a, continuing) {
                  : isOva ? '<span class="fmt ova">OVA</span>'
                  : isMovie ? '<span class="fmt movie">劇場</span>' : "";
   const ep = epOf(a.id);
-  const prog = st === "watching" ? `<span class="prog">▶${ep ? ep + "話" : "視聴中"}</span>`
-             : st === "dropped" ? `<span class="prog dropped">■${ep ? ep + "話で" : ""}中止</span>` : "";
+  const totalEp = isMovie ? 0 : (a.ep || 0);   // 進捗バッジ用の総話数（劇場版は対象外）
+  const prog = st === "watching" ? `<span class="prog">▶${totalEp ? ep + "/" + totalEp : (ep ? ep + "話" : "視聴中")}</span>`
+             : st === "dropped" ? `<span class="prog dropped">■${totalEp ? ep + "/" + totalEp + "で" : (ep ? ep + "話で" : "")}中止</span>`
+             : (st === "unwatched" && airStatus(a) === "upcoming") ? `<span class="prog upcoming">📅予定</span>` : "";
   const r = ratingOf(a.id);
   const myRate = r ? `<span class="myrate">★${r}</span>` : "";
   const img = a.img
@@ -1846,17 +2171,21 @@ function ctxInner(a) {
   const states = CTX_STATES.map(([k, label]) =>
     `<div class="ctx-state ${cur === k ? "cur" : ""}" onclick="event.stopPropagation();pickStatus(${id},'${k}')">${STAT_ICON[k]} ${label}</div>`
   ).join("");
-  const epRow = (cur === "watching" || cur === "dropped")
-    ? `<div class="ctx-ep" onclick="event.stopPropagation()">${cur === "dropped" ? "中止話数" : "視聴話数"}
-         <input type="number" min="1" inputmode="numeric" value="${ep || ""}" placeholder="—"
-                onclick="event.stopPropagation()" oninput="setEp(${id},this.value)"> 話</div>`
+  // 話数を記録（劇場版以外）。進捗 (視聴済/総話数) をラベルに併記。
+  const total = a.f === "MOVIE" ? 0 : (a.ep || 0);
+  const epProg = total ? ` <span style="color:var(--text-faint)">(${ep}/${total})</span>`
+               : (ep ? ` <span style="color:var(--text-faint)">(${ep}話)</span>` : "");
+  const epRow = a.f !== "MOVIE"
+    ? `<div class="ctx-item" onclick="event.stopPropagation();openEpModal(${id})">🎬 話数を記録${epProg}</div>`
     : "";
+  const noteRow = `<div class="ctx-item" onclick="event.stopPropagation();openNoteModal(${id})">📝 感想を書く${noteOf(id) ? " ✓" : ""}</div>`;
   return `
     <div class="ctx-title">${esc(a.t)}</div>
     <div class="ctx-stars" onclick="event.stopPropagation()" title="自分の評価（同じ星を再クリックで解除）">${stars}</div>
     <div class="ctx-seclabel">視聴状態の変更</div>
     <div class="ctx-states">${states}</div>
     ${epRow}
+    ${noteRow}
     ${(view.mode === "reco" || view.mode === "series") ? `
     <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? "✅ おすすめに表示する" : "🚫 おすすめに出さない"}</div>
     <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? "✅ シリーズを見たいリストから解除" : "📺 シリーズを見たいリストに追加"}</div>
@@ -1867,6 +2196,7 @@ function ctxInner(a) {
     ${isPrimeDirect(a)
       ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>`
       : `<div class="ctx-item" onclick="openPrimeSearch(${id})">🔍 プライム・ビデオで検索</div>`}
+    ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">🔍 ${SV_NAMES[c] || c}で検索</div>`).join("")}
     <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>`;
 }
 function positionCtx() {
@@ -1951,6 +2281,199 @@ window.addEventListener("scroll", () => {
   const b = document.getElementById("to-top");
   if (b) b.classList.toggle("show", window.scrollY > 600);
 }, { passive: true });
+
+/* ---------- 話数記録モーダル（エピソード単位） ---------- */
+let epModalId = null;
+let epcSel = 0;   // 話数モーダルで感想入力中の話番号（0=自動選択）
+let epAnchor = 0; // 話チップの範囲選択の起点（直近に通常クリックした話番号。0=未設定）
+// 話数変更後の共通リフレッシュ: 背後のポスター・統計・キュー・モーダル自身を更新。
+function afterEpChange(id) {
+  updatePoster(id);
+  renderStats();
+  if (view.mode === "collection" && !query) refreshNextUp();
+  if (view.mode === "timeline" && !query) render();   // 履歴ビューを開いたまま視聴したら反映
+  if (epModalId === id) renderEpModal(id);
+}
+function openEpModal(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (!a || a.f === "MOVIE") return;
+  // 旧データ（カウントのみ ep=N, eps無し）は [1..N] にシードして話別へ移行。
+  const w = watch[id];
+  if (w && !Array.isArray(w.eps) && w.ep > 0) markUpTo(id, w.ep, a.ep || 0);
+  epcSel = 0;
+  epAnchor = 0;
+  epModalId = id;
+  renderEpModal(id);
+  document.getElementById("epoverlay").classList.add("show");
+  document.getElementById("epmodal").classList.add("show");
+}
+function closeEpModal() {
+  epModalId = null;
+  document.getElementById("epoverlay").classList.remove("show");
+  document.getElementById("epmodal").classList.remove("show");
+}
+// 話チップのクリック。通常はその話のトグル。Shift+クリックでは起点(epAnchor)から
+// クリック話までの範囲を「起点の状態」に揃えてまとめて記録/解除する（一気見の範囲指定用）。
+function epChipClick(id, n, total, range) {
+  if (range && epAnchor > 0 && epAnchor !== n) {
+    const lo = Math.min(epAnchor, n), hi = Math.max(epAnchor, n);
+    const set = new Set(epsOf(id));
+    const mark = set.has(epAnchor);   // 起点が視聴済み→範囲を視聴済みに / 未視聴→範囲を解除
+    for (let i = lo; i <= hi; i++) { if (mark) set.add(i); else set.delete(i); }
+    commitEps(id, [...set], total);
+  } else {
+    toggleEp(id, n, total);
+  }
+  epAnchor = n;
+}
+function renderEpModal(id) {
+  const a = catalog.find(x => x.id === id);
+  const m = document.getElementById("epmodal");
+  if (!a) { closeEpModal(); return; }
+  const total = a.ep || 0;
+  const eps = new Set(epsOf(id));
+  const watched = eps.size;
+  const nx = nextEp(id, total);
+  let grid = "";
+  if (total > 0) {
+    let chips = "";
+    for (let n = 1; n <= total; n++) {
+      const noted = epNoteOf(id, n) ? " noted" : "";
+      const dot = epNoteOf(id, n) ? '<span class="dot">●</span>' : "";
+      chips += `<button class="ep-chip ${eps.has(n) ? "on" : ""}${noted}" onclick="epChipClick(${id},${n},${total},event.shiftKey);afterEpChange(${id})" oncontextmenu="epChipClick(${id},${n},${total},true);afterEpChange(${id});return false">${n}${dot}</button>`;
+    }
+    grid = `<div class="ep-grid">${chips}</div><div class="ep-hint">💡 一気見した話は範囲でまとめて記録: 起点をクリック → 終点を右クリック（Shift+クリックでも可）</div>`;
+  }
+  const progRight = nx ? `　次: 第${nx}話` : (total && watched >= total ? "　🎉 完走" : "");
+  const aLbl = airLabel(a);
+  const airBit = aLbl ? ` <span class="air-badge ${airStatus(a)}">${aLbl}</span>` : "";
+  const upto = `<div class="ep-upto">ここまで見た:
+      <input type="number" min="0" ${total ? `max="${total}"` : ""} inputmode="numeric" value="${watched || ""}" placeholder="—"
+             onclick="event.stopPropagation()" onchange="setEp(${id},this.value);afterEpChange(${id})"> 話</div>`;
+  const allBtn = total > 0 ? `<button class="ep-btn" onclick="markAllEps(${id},${total});afterEpChange(${id})">全話</button>` : "";
+  const plusBtn = total > 0 ? "" : `<button class="ep-btn" onclick="markUpTo(${id},${watched + 1},0);afterEpChange(${id})">＋1 次の話を見た</button>`;
+  // 各話の一言感想: 入力対象の話を選ぶ（既定は直近の視聴話、無ければ第1話）。
+  const lastEp = epsOf(id).length ? Math.max(...epsOf(id)) : 1;
+  const selN = epcSel > 0 ? epcSel : lastEp;
+  const epcBlock = `
+    <div class="ep-seclabel">各話の感想（💬は感想あり）</div>
+    <div class="epc">
+      <div class="epc-lbl">第 <input type="number" min="1" ${total ? `max="${total}"` : ""} value="${selN}" style="width:54px"
+        onclick="event.stopPropagation()" onchange="epcSel=parseInt(this.value,10)||1;renderEpModal(${id})"> 話のひとこと</div>
+      <input type="text" placeholder="この話の感想…" value="${esc(epNoteOf(id, selN))}"
+        onclick="event.stopPropagation()" onchange="setEpNote(${id},${selN},this.value);afterEpChange(${id})">
+    </div>`;
+  m.innerHTML = `
+    <div class="ep-head">
+      <div class="ep-ttl">${esc(a.t)}</div>
+      <button class="ep-close" onclick="closeEpModal()" aria-label="閉じる">×</button>
+    </div>
+    <div class="ep-prog">視聴済 <b>${watched}</b> / ${total ? "全" + total + "話" : "話数未定"}${progRight}${airBit}</div>
+    ${grid}
+    ${upto}
+    ${epcBlock}
+    <div class="ep-actions">${allBtn}${plusBtn}<button class="ep-btn ghost" onclick="openNoteModal(${id})">📝 作品の感想${noteOf(id) ? " ✓" : ""}</button><button class="ep-btn ghost" onclick="clearEps(${id});afterEpChange(${id})">クリア</button></div>`;
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && epModalId != null) closeEpModal(); });
+
+/* ---------- 感想（作品ごと）モーダル ---------- */
+let noteModalId = null;
+function openNoteModal(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  noteModalId = id;
+  renderNoteModal(id);
+  document.getElementById("noteoverlay").classList.add("show");
+  document.getElementById("notemodal").classList.add("show");
+  const ta = document.querySelector("#notemodal .ep-note");
+  if (ta) { ta.focus(); ta.setSelectionRange(ta.value.length, ta.value.length); }
+}
+function closeNoteModal() {
+  // 閉じる前に未保存のテキストarea内容を保存する。
+  if (noteModalId != null) {
+    const ta = document.querySelector("#notemodal .ep-note");
+    if (ta) saveNoteFromModal(noteModalId, ta.value);
+  }
+  noteModalId = null;
+  document.getElementById("noteoverlay").classList.remove("show");
+  document.getElementById("notemodal").classList.remove("show");
+}
+// テキストを保存し、背後のポスター・話数モーダルを更新。
+function saveNoteFromModal(id, text) {
+  setNote(id, text);
+  updatePoster(id);
+  if (epModalId === id) renderEpModal(id);
+}
+function renderNoteModal(id) {
+  const a = catalog.find(x => x.id === id);
+  const m = document.getElementById("notemodal");
+  if (!a) { closeNoteModal(); return; }
+  m.innerHTML = `
+    <div class="ep-head">
+      <div class="ep-ttl">📝 ${esc(a.t)}</div>
+      <button class="ep-close" onclick="closeNoteModal()" aria-label="閉じる">×</button>
+    </div>
+    <div class="ep-seclabel">この作品の感想</div>
+    <textarea class="ep-note" placeholder="感想・レビューを書く…" onclick="event.stopPropagation()"
+      onchange="saveNoteFromModal(${id}, this.value)">${esc(noteOf(id))}</textarea>
+    <div class="ep-actions"><button class="ep-btn" onclick="closeNoteModal()">保存して閉じる</button></div>`;
+}
+document.addEventListener("keydown", e => { if (e.key === "Escape" && noteModalId != null) closeNoteModal(); });
+
+/* ---------- マイページ「次に見る」キュー ---------- */
+// 視聴中かつ総話数が分かり、未視聴話が残る作品を集める（年降順）。
+function nextUpItems() {
+  return catalog
+    .filter(a => statusOf(a.id) === "watching" && a.ep > 0 && nextEp(a.id, a.ep) !== null)
+    .sort((x, y) => (y.y || 0) - (x.y || 0) || (x.t < y.t ? -1 : 1));
+}
+function nextUpHtml() {
+  const items = nextUpItems();
+  if (!items.length) return "";
+  const cards = items.map(a => {
+    const nx = nextEp(a.id, a.ep);
+    const as = airStatus(a);
+    const badge = (as === "airing" || as === "upcoming") ? `<span class="air-badge ${as}">${airLabel(a)}</span>` : "";
+    const action = as === "upcoming"
+      ? `<span class="nextup-wait">放送開始待ち</span>`
+      : `<button class="nextup-btn" onclick="event.stopPropagation();nextEpWatched(${a.id})">✓ 第${nx}話</button>`;
+    return `<div class="nextup-card">${posterHtml(a)}
+      <div class="nextup-info">
+        <span class="nextup-next">次: <b>第${nx}話</b> /${a.ep}${badge}</span>
+        ${action}
+      </div></div>`;
+  }).join("");
+  return `<div class="nextup" id="nextup-wrap">
+    <div class="nextup-head">▶ 次に見る <span class="count">${items.length}作品</span></div>
+    <div class="nextup-grid">${cards}</div></div>`;
+}
+// 話数変更後にキュー部分だけ差し替える（コレクション表示中のみ）。
+function refreshNextUp() {
+  const wrap = document.getElementById("nextup-wrap");
+  const html = nextUpHtml();
+  if (wrap) {
+    if (html) { const tmp = document.createElement("div"); tmp.innerHTML = html; wrap.replaceWith(tmp.firstElementChild); }
+    else wrap.remove();
+  } else if (html && view.mode === "collection" && collectionSort === "season" && !query) {
+    const list = document.getElementById("list");
+    const sb = list.querySelector(".collection-sort");   // sortBar の直後に挿入
+    const tmp = document.createElement("div"); tmp.innerHTML = html;
+    if (sb && sb.nextSibling) list.insertBefore(tmp.firstElementChild, sb.nextSibling);
+    else list.insertBefore(tmp.firstElementChild, list.firstChild);
+  }
+}
+// 「✓ 第N話を見た」: 次の未視聴話を消化して再描画。
+function nextEpWatched(id) {
+  const a = catalog.find(x => x.id === id);
+  if (!a || !a.ep) return;
+  const nx = nextEp(id, a.ep);
+  if (nx == null) return;
+  toggleEp(id, nx, a.ep);
+  afterEpChange(id);
+  toast(`第${nx}話を見た`);
+}
 window.addEventListener("resize", hideCtxMenu);
 
 /* ---------- ホバー情報カード ---------- */
@@ -1985,6 +2508,39 @@ function airInfoRow(a) {
   if (a.d) return row("放映", `${fmtDateInt(a.d)} 放送開始`);
   return "";
 }
+// 配信サービス短縮コード → 表示名（scrape_anime.py の STREAM_SERVICES と対応）。
+const SV_NAMES = {
+  nf: "Netflix", prime: "Prime Video", dani: "dアニメストア",
+  unext: "U-NEXT", abema: "ABEMA", nico: "ニコニコ", disney: "Disney+",
+  hulu: "Hulu", bandai: "バンダイCh", funi: "Funimation"
+};
+// 情報カードの「配信」行（テキスト表示。カードは pointer-events:none なのでクリック不可）。
+function svRow(a) {
+  if (!Array.isArray(a.sv) || !a.sv.length) return "";
+  const names = a.sv.map(c => `<span class="ic-sv">${SV_NAMES[c] || c}</span>`).join("");
+  return `<div class="ic-row"><span class="ic-k">配信</span><span class="ic-svs">${names}</span></div>`;
+}
+// 各配信サービスの作品検索URL（タイトルは encodeURIComponent 済みを受ける）。
+const SV_SEARCH = {
+  nf: t => `https://www.netflix.com/search?q=${t}`,
+  dani: t => `https://animestore.docomo.ne.jp/animestore/sch_pc?searchKey=${t}`,
+  unext: t => `https://video.unext.jp/freeword?query=${t}`,
+  abema: t => `https://abema.tv/search?q=${t}`,
+  nico: t => `https://www.nicovideo.jp/search/${t}`,
+  disney: t => `https://www.disneyplus.com/search?q=${t}`,
+  hulu: t => `https://www.hulu.jp/search?q=${t}`,
+  bandai: t => `https://www.b-ch.com/search/?word=${t}`,
+  funi: t => `https://www.crunchyroll.com/search?q=${t}`
+};
+function openStreamSearch(id, code) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (!a) return;
+  const q = encodeURIComponent(a.t);
+  const fn = SV_SEARCH[code];
+  const url = fn ? fn(q) : `https://www.google.com/search?q=${q}`;
+  window.open(url, "_blank", "noopener");
+}
 function showInfo(e, id) {
   const a = catalog.find(x => x.id === id);
   if (!a) return;
@@ -2001,14 +2557,18 @@ function showInfo(e, id) {
   const myRow = myR ? `<div class="ic-row"><span class="ic-k">自分評価</span><span style="color:#fcd34d">${"★".repeat(myR)}</span><span style="color:var(--text-faint)">${"★".repeat(5 - myR)}</span></div>` : "";
   const wRow = wSt === "watching" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中${wEp ? `（${wEp}話まで）` : ""}</div>`
              : wSt === "dropped" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中止${wEp ? `（${wEp}話で）` : ""}</div>` : "";
+  const note = noteOf(a.id);
+  const noteRow = note ? `<div class="ic-note">📝 ${esc(note.length > 90 ? note.slice(0, 90) + "…" : note)}</div>` : "";
   card.innerHTML =
     `<div class="ic-title">${esc(a.t)}</div>` +
     (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}${a.kk ? ' <span class="ic-kakuyomu">カクヨム発</span>' : ""}</div>` : "") +
     (a.au ? `<div class="ic-row"><span class="ic-k">原作者</span>${esc(a.au)}</div>` : "") +
     (a.st ? `<div class="ic-row"><span class="ic-k">制作</span>${esc(studioDisplay(a.st))}</div>` : "") +
     airRow +
+    svRow(a) +
     myRow + wRow +
-    (chars ? `<div class="ic-chars">${chars}</div>` : "");
+    (chars ? `<div class="ic-chars">${chars}</div>` : "") +
+    noteRow;
   card.classList.add("show");
   positionInfo(e.currentTarget, card);
 }
@@ -2194,7 +2754,9 @@ function exportData(format) {
   hideExportMenu();
   const date = new Date().toISOString().slice(0, 10);
   if (format === "json") {
-    const blob = new Blob([JSON.stringify(watch, null, 2)], { type: "application/json" });
+    // watch（視聴状態・評価・感想）と history（タイムライン）をまとめて書き出す。
+    const bundle = { v: 2, exportedAt: new Date().toISOString(), watch, history };
+    const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
     saveFile(blob, `anime-watch-${date}.json`, "JSONで書き出しました");
   } else if (format === "csv") {
     exportCsv(date);
@@ -2215,11 +2777,11 @@ function exportCsv(date) {
   watched.sort((a, b) => b.y - a.y
     || (SEASON_ORDER_DISPLAY[a.s] ?? 9) - (SEASON_ORDER_DISPLAY[b.s] ?? 9)
     || (b.sc || 0) - (a.sc || 0));
-  const head = ["ID", "タイトル", "原題", "年", "区分", "形式", "視聴状態", "視聴話数", "自分評価", "AniList評価"];
+  const head = ["ID", "タイトル", "原題", "年", "区分", "形式", "視聴状態", "視聴話数", "自分評価", "AniList評価", "感想"];
   const rows = watched.map(a => [
     a.id, a.t, a.tr || "", a.y, SEASON_JA[a.s] || a.s,
     FMT_JA[a.f] || a.f, STATUS_JA[statusOf(a.id)], epOf(a.id) || "", ratingOf(a.id) || "",
-    a.sc ? (a.sc / 10).toFixed(1) : "",
+    a.sc ? (a.sc / 10).toFixed(1) : "", noteOf(a.id),
   ]);
   const csv = [head, ...rows].map(r => r.map(csvCell).join(",")).join("\r\n");
   // 先頭に BOM を付け、Excel で日本語が文字化けしないようにする
@@ -2237,8 +2799,12 @@ function importWatch() {
       try {
         const parsed = JSON.parse(reader.result);
         if (typeof parsed !== "object" || Array.isArray(parsed)) throw new Error("形式が不正です");
+        // 新形式 { watch, history } と旧形式（素の watch マップ）の両方を受理。
+        const rawWatch = parsed.watch && typeof parsed.watch === "object" ? parsed.watch : parsed;
         if (!confirm("現在の視聴データを読み込んだ内容で置き換えます。よろしいですか？")) return;
-        watch = migrateWatch(parsed); saveWatch(); render();
+        watch = migrateWatch(rawWatch); saveWatch();
+        if (Array.isArray(parsed.history)) { history = parsed.history.filter(e => e && e.id != null && e.t); saveHistory(); }
+        render();
         toast("読み込みました");
       } catch (e) { alert("読み込み失敗: " + e.message); }
     };
