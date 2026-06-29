@@ -1,0 +1,12 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "permissions": {
+    "allow": [
+      "Read(TODO.md)",
+      "Edit(TODO.md)",
+      "Write(TODO.md)",
+      "mcp__Notion__notion-create-pages",
+      "mcp__Notion__notion-update-page"
+    ]
+  }
+}

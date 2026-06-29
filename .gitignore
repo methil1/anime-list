@@ -6,3 +6,17 @@ broadcast_backfill.log
 prime_backfill.log
 stream_backfill.log
 authors_backfill.log
+
+# Bubblewrap / TWA ビルド成果物（鍵・生成プロジェクトはコミットしない）
+android/*.keystore
+android/*.apk
+android/*.aab
+android/app/
+android/.gradle/
+android/build/
+android/gradle/
+android/gradlew
+android/gradlew.bat
+android/build.gradle
+android/settings.gradle
+android/store_icon.png
