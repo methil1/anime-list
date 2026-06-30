@@ -345,7 +345,6 @@ query ($page: Int) {
       popularity
       duration
       externalLinks { site type url }
-      staff(perPage: 2) { edges { node { id } } }
       source
       studios { edges { isMain node { name } } }
       staff(sort: [RELEVANCE], perPage: 8) { edges { role node { name { native full } } } }

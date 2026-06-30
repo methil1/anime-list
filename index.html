@@ -1016,7 +1016,10 @@ function init() {
   }
   catalog = cat.anime;
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
-  view.year = years[0];
+  // デフォルトは現クールの年。未来クール（先行登録された翌年作品など）が最新年でも
+  // それを既定にせず、現クール年があればそれを、無ければ未来でない最新年を選ぶ。
+  const ccYear = currentCour().year;
+  view.year = years.includes(ccYear) ? ccYear : (years.find(y => y <= ccYear) ?? years[0]);
   // 別タブで #compare を開いた場合は比較ビューで起動（比較データ読込済みのときのみ）。
   if (location.hash === "#compare" && compare) view = { mode: "compare", year: null };
   document.getElementById("src-note").textContent =
