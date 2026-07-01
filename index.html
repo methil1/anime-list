@@ -2104,7 +2104,7 @@ function posterHtml(a, continuing) {
   const isOva = a.f === "OVA";
   const cl = (isMovie || isOva) ? null : courLabelFor(a);
   const contBadge = continuing ? '<span class="cont">継続中</span>' : "";
-  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : (a.co ? (a.sp ? "分割" : "連続") + a.co + "クール" : (isOva ? "OVA" : "話数未定")));
+  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話${a.epEst ? "（暫定）" : ""}` : (a.co ? (a.sp ? "分割" : "連続") + a.co + "クール" : (isOva ? "OVA" : "話数未定")));
   const fmtBadge = a.f === "SHORT" ? '<span class="fmt short">ショート</span>'
                  : isOva ? '<span class="fmt ova">OVA</span>'
                  : isMovie ? '<span class="fmt movie">劇場</span>' : "";

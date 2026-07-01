@@ -1042,6 +1042,128 @@ def run_broadcast(batch=50):
     print(f"\n完了: {done} 件を処理しました（{OUT_PATH} 更新済み）。", flush=True)
 
 
+def jikan_episodes(mal_id, retries=4):
+    """Jikan(MAL)から総話数(episodes)を返す。未確定/データ無し/404 は None。"""
+    req = urllib.request.Request(
+        JIKAN_URL.format(mal_id),
+        headers={"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AnimeCatalog/1.0"},
+    )
+    for _ in range(retries):
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = json.loads(resp.read().decode("utf-8"))
+            ep = (data.get("data") or {}).get("episodes")
+            return ep if (isinstance(ep, int) and ep > 0) else None
+        except urllib.error.HTTPError as e:
+            if e.code == 429:
+                time.sleep(int(e.headers.get("Retry-After", "2")) + 1)
+                continue
+            if e.code == 404:
+                return None
+            if e.code >= 500:
+                time.sleep(3)
+                continue
+            return None
+        except urllib.error.URLError:
+            time.sleep(3)
+            continue
+    return None
+
+
+# AniList の episodes が未確定(null)の直近TV/ショートに、MAL(Jikan)の話数を暫定補完する対象年の下限。
+EPFILL_MIN_YEAR = 2025
+
+
+def run_episode_fill(force=False, batch=50):
+    """ep 未確定(null)の直近TV/ショートに MAL(Jikan) の episodes を暫定補完。
+    epEst=1 で MAL 由来(暫定)を明示、MAL も未定なら epEst=0 で試行済みマーク。
+    手動クール補正(co)済み・AniList 確定 ep 持ちはスキップ。各バッチ後にチェックポイント保存。
+    force=True で試行済み(epEst=0)も再取得。全体再スクレイプ時は make_record が epEst を消すので再取得対象に戻る。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime
+            if a.get("f") in ("TV", "SHORT")
+            and a.get("ep") is None
+            and not a.get("co")               # 手動クール補正済み(Slime4期等)は除外
+            and (a.get("y") or 0) >= EPFILL_MIN_YEAR
+            and (force or "epEst" not in a)]  # 試行済みは再取得しない(force除く)
+    print(f"話数補完対象: {len(todo)} 件（Jikan経由・約1件/秒）", flush=True)
+    done = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(MAL_ID_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    AniList error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        malmap = {m["id"]: m.get("idMal") for m in data["data"]["Page"]["media"]}
+        for aid in ids:
+            rec = by_id.get(aid)
+            if rec is None:
+                continue
+            mal = malmap.get(aid)
+            ep = jikan_episodes(mal) if mal else None
+            if ep:
+                rec["ep"] = ep
+                rec["epEst"] = 1   # MAL 由来(暫定)
+            else:
+                rec["epEst"] = 0   # 試行済み・MAL も未定
+            done += 1
+            time.sleep(1.1)   # Jikan: 約60req/分
+        print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        write_catalog(anime)   # バッチ毎チェックポイント（中断対策）
+    filled = sum(1 for a in anime if a.get("epEst") == 1)
+    print(f"\n完了: {done} 件処理／うち暫定補完 {filled} 件（{OUT_PATH} 更新済み）。", flush=True)
+
+
+# 方式A: AniList の放送予定表(airingSchedule)の最終話番号を暫定総話数として使う。
+AIRING_EP_QUERY = ("query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { "
+                   "id nextAiringEpisode { episode } airingSchedule(perPage: 100) { nodes { episode } } } } }")
+
+
+def run_airing_fill(batch=50):
+    """ep 未確定の直近TV/ショートに、AniList airingSchedule の最終予定話数を暫定補完(方式A)。
+    MAL補完(方式C)で埋まらなかった取りこぼしを減らす。epEst=1 で暫定を明示。
+    放送終了(nextAiringEpisode無し)なら予定表が完結＝最終話番号が総話数。放送中/予定は
+    予定表が部分登録の恐れがあるため mx>=6 のみ採用（1〜数話の過少評価を防ぐ）。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime
+            if a.get("f") in ("TV", "SHORT")
+            and a.get("ep") is None
+            and not a.get("co")
+            and (a.get("y") or 0) >= EPFILL_MIN_YEAR]
+    print(f"放送予定話数の補完対象: {len(todo)} 件（AniList airingSchedule）", flush=True)
+    done = 0
+    filled = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(AIRING_EP_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    AniList error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        for m in data["data"]["Page"]["media"]:
+            rec = by_id.get(m["id"])
+            if rec is None:
+                continue
+            nodes = ((m.get("airingSchedule") or {}).get("nodes")) or []
+            eps = [n["episode"] for n in nodes if isinstance(n.get("episode"), int)]
+            mx = max(eps) if eps else 0
+            nxt = (m.get("nextAiringEpisode") or {}).get("episode")
+            if mx > 0 and (nxt is None or mx >= 6):
+                rec["ep"] = mx
+                rec["epEst"] = 1
+                filled += 1
+            done += 1
+        print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        write_catalog(anime)   # バッチ毎チェックポイント
+        time.sleep(1.0)
+    print(f"\n完了: {done} 件処理／うち予定表から暫定補完 {filled} 件（{OUT_PATH} 更新済み）。", flush=True)
+
+
 # ---------- なろう原作判定 ----------
 # AniList の source はなろう発かどうかを区別しない（書籍化済みは LIGHT_NOVEL になる）ため、
 # なろう公式API (https://dev.syosetu.com/man/api/) でタイトル完全一致検索して判定する。
@@ -1568,6 +1690,12 @@ def main():
     elif args and args[0] == "--broadcast":
         # air が無い旧クール作品に MAL(Jikan) の放送曜日・時刻(bc) を補完。
         run_broadcast()
+    elif args and args[0] == "--episodes":
+        # ep 未確定の直近TV/ショートに MAL(Jikan) の話数を暫定補完(epEst)。--force で試行済みも再取得。
+        run_episode_fill(force="--force" in args)
+    elif args and args[0] == "--airing":
+        # ep 未確定の直近TV/ショートに AniList 放送予定表の最終話番号を暫定補完(方式A)。
+        run_airing_fill()
     elif args and args[0] == "--authors":
         # 原作者(au)をバックフィル。ENRICH_QUERY に staff を含むので run_enrich で au が付く。
         run_enrich(predicate=lambda a: ("--force" in args) or "au" not in a)
