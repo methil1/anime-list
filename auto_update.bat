@@ -1,7 +1,7 @@
 @echo off
 REM ============================================================
 REM  Anime catalog quarterly auto-update (run by Task Scheduler)
-REM  Fires on 1/1, 4/1, 7/1, 10/1: scrape --update then git push
+REM  Fires on 1/1, 1/16, 4/1, 4/16, 7/1, 7/16, 10/1, 10/16: scrape --update then git push
 REM  Can also be run manually by double-clicking this file.
 REM ============================================================
 chcp 65001 >nul

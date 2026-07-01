@@ -2437,16 +2437,23 @@ document.addEventListener("keydown", e => { if (e.key === "Escape" && noteModalI
 
 /* ---------- マイページ「次に見る」キュー ---------- */
 // 視聴中かつ総話数が分かり、未視聴話が残る作品を集める（年降順）。
+// 次に見る話。総話数が判明していれば未視聴の最小話、放送中で総話数未確定(ep=null)なら
+// 「最新視聴話+1」を返す。全話視聴済み（総話数判明時）のときだけ null。
+function nextUnwatched(a) {
+  if (a.ep > 0) return nextEp(a.id, a.ep);
+  const eps = epsOf(a.id);
+  return (eps.length ? Math.max(...eps) : 0) + 1;
+}
 function nextUpItems() {
   return catalog
-    .filter(a => statusOf(a.id) === "watching" && a.ep > 0 && nextEp(a.id, a.ep) !== null)
+    .filter(a => statusOf(a.id) === "watching" && nextUnwatched(a) !== null)
     .sort((x, y) => (y.y || 0) - (x.y || 0) || (x.t < y.t ? -1 : 1));
 }
 function nextUpHtml() {
   const items = nextUpItems();
   if (!items.length) return "";
   const cards = items.map(a => {
-    const nx = nextEp(a.id, a.ep);
+    const nx = nextUnwatched(a);
     const as = airStatus(a);
     const badge = (as === "airing" || as === "upcoming") ? `<span class="air-badge ${as}">${airLabel(a)}</span>` : "";
     const action = as === "upcoming"
@@ -2454,7 +2461,7 @@ function nextUpHtml() {
       : `<button class="nextup-btn" onclick="event.stopPropagation();nextEpWatched(${a.id})">✓ 第${nx}話</button>`;
     return `<div class="nextup-card">${posterHtml(a)}
       <div class="nextup-info">
-        <span class="nextup-next">次: <b>第${nx}話</b> /${a.ep}${badge}</span>
+        <span class="nextup-next">次: <b>第${nx}話</b> /${a.ep || "?"}${badge}</span>
         ${action}
       </div></div>`;
   }).join("");
@@ -2480,8 +2487,8 @@ function refreshNextUp() {
 // 「✓ 第N話を見た」: 次の未視聴話を消化して再描画。
 function nextEpWatched(id) {
   const a = catalog.find(x => x.id === id);
-  if (!a || !a.ep) return;
-  const nx = nextEp(id, a.ep);
+  if (!a) return;
+  const nx = nextUnwatched(a);
   if (nx == null) return;
   toggleEp(id, nx, a.ep);
   afterEpChange(id);
