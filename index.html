@@ -2058,13 +2058,14 @@ function seasonGroupsHtml(items, year, prefix = "") {
     } else if (s === "OVA") {
       base.sort((a, b) => (a.d || Infinity) - (b.d || Infinity) || (b.sc || 0) - (a.sc || 0));
     } else {
-      base.sort((a, b) => (b.sc || 0) - (a.sc || 0));
+      // クール内はショート以外を上、ショートを下にまとめ、各群内は評価値の高い順。
+      base.sort((a, b) => ((a.f === "SHORT") - (b.f === "SHORT")) || (b.sc || 0) - (a.sc || 0));
     }
-    // 現クールには継続作品を混ぜ、開始作品と合わせてクール全体を評価値順で表示する。
+    // 現クールには継続作品を混ぜ、開始作品と合わせてクール全体を（ショートは下に）評価値順で表示する。
     const isCurrentCour = view.mode === "year" && !query && year === cc.year && s === cc.season;
     const cont = isCurrentCour ? continuing.slice() : [];
     const arr = cont.length
-      ? base.concat(cont).sort((a, b) => (b.sc || 0) - (a.sc || 0))
+      ? base.concat(cont).sort((a, b) => ((a.f === "SHORT") - (b.f === "SHORT")) || (b.sc || 0) - (a.sc || 0))
       : base;
     const shortCount = base.filter(a => a.f === "SHORT").length;
     let countText = shortCount ? `${base.length}作品（内ショート${shortCount}作品）` : `${base.length}作品`;
