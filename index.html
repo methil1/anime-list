@@ -945,6 +945,11 @@ function courLabel(ep) {
   if (ep > 13) return { multi: true, text: ep > 52 ? "長期" : "連続" + Math.max(2, Math.round(ep / 13)) + "クール" };
   return null;
 }
+// 手動クール補正(co=総クール数/sp=分割)があればそれを優先。無ければ ep 由来の courLabel。
+function courLabelFor(a) {
+  if (a.co) return { multi: true, text: (a.sp ? "分割" : "連続") + a.co + "クール" };
+  return courLabel(a.ep);
+}
 // クールの暦順。現クール（今放送中のクール）は今日の月から算出する。
 const SEASON_CAL = ["WINTER", "SPRING", "SUMMER", "FALL"];
 function currentCour() {
@@ -967,6 +972,7 @@ function courCount(ep) {
 // 連続2〜3クール作品 a の放送期間が cour cc を含むか（開始クール自身も含む）。長期(>52話)・1クールは対象外。
 function airsCourSpan(a, cc) {
   if (a.f !== "TV" && a.f !== "SHORT") return false;
+  if (a.cs) return a.cs.includes(`${cc.year}-${cc.season}`);   // 手動クール範囲(分割/連続)を優先
   if (!SEASON_CAL.includes(a.s)) return false;
   const k = courCount(a.ep);
   if (k < 2 || k >= 4) return false;
@@ -983,10 +989,12 @@ function airsCourSpan(a, cc) {
 function continuingInCour(cc) {
   return catalog.filter(a => {
     if (a.f !== "TV" && a.f !== "SHORT") return false;
+    if (!passStatus(a)) return false;
+    // 手動クール範囲(cs)がある作品は ep 由来の推定より優先。判明クールに含まれ、開始クールでなければ継続表示。
+    if (a.cs) return a.cs.includes(`${cc.year}-${cc.season}`) && !(a.y === cc.year && a.s === cc.season);
     if (!SEASON_CAL.includes(a.s)) return false;
     const k = courCount(a.ep);
     if (k < 2 || k >= 4) return false;
-    if (!passStatus(a)) return false;
     let yi = a.y, si = SEASON_CAL.indexOf(a.s);
     for (let n = 0; n < k; n++) {
       if (yi === cc.year && SEASON_CAL[si] === cc.season) {
@@ -2094,9 +2102,9 @@ function posterHtml(a, continuing) {
   const st = statusOf(a.id);
   const isMovie = a.f === "MOVIE";
   const isOva = a.f === "OVA";
-  const cl = (isMovie || isOva) ? null : courLabel(a.ep);
+  const cl = (isMovie || isOva) ? null : courLabelFor(a);
   const contBadge = continuing ? '<span class="cont">継続中</span>' : "";
-  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : (isOva ? "OVA" : "話数未定"));
+  const epText = isMovie ? "劇場版" : (a.ep ? `全${a.ep}話` : (a.co ? (a.sp ? "分割" : "連続") + a.co + "クール" : (isOva ? "OVA" : "話数未定")));
   const fmtBadge = a.f === "SHORT" ? '<span class="fmt short">ショート</span>'
                  : isOva ? '<span class="fmt ova">OVA</span>'
                  : isMovie ? '<span class="fmt movie">劇場</span>' : "";

@@ -514,6 +514,31 @@ def airing_at(m):
     return None
 
 
+# 分割/連続の複数クール作品で AniList の episodes が未確定(null)等のものを手動補正する。
+# AniList ID をキーに、判明しているクール範囲(cs)・総クール数(co)・分割フラグ(sp)を指定。
+# フロント(index.html)の courLabel / continuingInCour / airsCourSpan が cs/co/sp を
+# ep 由来の推定より優先して使う。新クールが発表されたら cs に "YYYY-SEASON" を追記するだけ。
+COUR_OVERRIDES = {
+    # 転生したらスライムだった件 第4期: 2026/4発表の分割5クール。
+    # 春+夏は連続2クール放送、残り3クールは時期未定（判明し次第 cs に追記）。
+    182205: {"co": 5, "sp": 1, "cs": ["2026-SPRING", "2026-SUMMER"]},
+}
+
+
+def apply_cour_override(rec):
+    """複数クール作品の手動補正(COUR_OVERRIDES)をレコードへ適用。
+    cs=判明クール範囲(YYYY-SEASON リスト), co=総クール数, sp=分割フラグ(1=分割)。"""
+    ov = COUR_OVERRIDES.get(rec.get("id"))
+    if not ov:
+        return
+    if ov.get("cs"):
+        rec["cs"] = list(ov["cs"])
+    if ov.get("co"):
+        rec["co"] = ov["co"]
+    if ov.get("sp"):
+        rec["sp"] = 1
+
+
 def make_record(m, year, season, force_fmt=None):
     """AniList の media 1件を出力レコードに変換。
     MOVIE/OVA は公開年(startDate)でカテゴライズし s=フォーマット名。"""
@@ -542,6 +567,7 @@ def make_record(m, year, season, force_fmt=None):
         "a": date.today().isoformat(),  # カタログへの追加日（新着表示用）
     }
     enrich_record(rec, m)
+    apply_cour_override(rec)
     return rec
 
 
