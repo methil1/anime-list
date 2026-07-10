@@ -1353,7 +1353,7 @@ function searchKey(a) {
    検索欄に合言葉（DEV_COMMAND）を入力するとON/OFFがトグルされる（検索は実行されない）。
    状態は isDevMode() と body.dev-mode クラスで参照でき、隠し機能（今後のR-18一覧など）の
    表示ゲートとして使う。現時点で隠しているUIはない（仕組みのみ）。 */
-const DEV_COMMAND = "animemo-dev";
+const DEV_COMMAND = "357357357";
 function isDevMode() { return devMode; }
 function applyDevMode() { document.body.classList.toggle("dev-mode", devMode); }
 function toggleDevMode() {
@@ -1366,7 +1366,7 @@ function toggleDevMode() {
 
 function onSearch() {
   const raw = document.getElementById("search").value.trim();
-  if (raw.toLowerCase() === DEV_COMMAND) {   // 裏コマンド: 入力を消してモードをトグル
+  if (raw.normalize("NFKC").toLowerCase() === DEV_COMMAND) {   // 裏コマンド: 入力を消してモードをトグル（全角数字もOK）
     document.getElementById("search").value = "";
     toggleDevMode();
     return;
