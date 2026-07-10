@@ -540,6 +540,10 @@
   .b9-mark { position: absolute; top: 6px; left: 6px; z-index: 2; background: var(--accent); color: #fff;
     font-weight: 800; font-size: 13px; width: 22px; height: 22px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; }
+  /* ---------- 開発者モード（裏コマンド） ---------- */
+  .dev-badge { display: none; margin-left: 10px; font-size: 12px; font-weight: 800; vertical-align: middle;
+    color: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; }
+  body.dev-mode .dev-badge { display: inline-block; }
 </style>
 </head>
 <body>
@@ -590,7 +594,7 @@
     <header>
       <div class="title-row">
         <div class="title-block">
-          <h1>アニメモ！</h1>
+          <h1>アニメモ！<span class="dev-badge">🛠 DEV</span></h1>
           <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
           <p class="dev-note">※おすすめ機能は現在開発中です。</p>
           <p class="src-note" id="src-note"></p>
@@ -638,6 +642,7 @@ const HISTORY_MAX = 5000;                 // 履歴の上限件数（肥大化�
 const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
 const COMPARE_KEY = "animeTV.compare.v1"; // 比較相手の視聴データ { name, watch:{id:{s,ep,r}}, importedAt }
 const BEST9_KEY = "animeTV.best9.v1";     // アニメ9選（id配列・最大9件、並び=3×3グリッドの枠順）。※キー定数はここで定義（TDZ回避）
+const DEV_KEY = "animeTV.dev.v1";         // 開発者モード（裏コマンド）フラグ。"1"=ON
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
@@ -666,6 +671,8 @@ let compare = loadCompare(); // 比較相手の視聴データ（null か {name,
 let compareCat = "all";      // 比較ビューの絞り込み: "all" | "both"(共通) | "mine"(自分のみ) | "theirs"(相手のみ)
 let best9 = loadBest9();     // アニメ9選（id配列・最大9件、並び=3×3グリッドの枠順）
 let best9SwapIdx = null;     // 9選グリッドで入れ替え元に選択中の枠index（null=未選択）
+let devMode = false;         // 開発者モード（裏コマンドでON/OFF、localStorageに永続化）
+try { devMode = localStorage.getItem(DEV_KEY) === "1"; } catch (e) {}
 let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare" | "timeline" | "best9"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
@@ -1061,6 +1068,7 @@ function init() {
     return;
   }
   catalog = cat.anime;
+  applyDevMode();   // 開発者モードの永続状態を body クラスへ反映
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   // デフォルトは現クールの年。未来クール（先行登録された翌年作品など）が最新年でも
   // それを既定にせず、現クール年があればそれを、無ければ未来でない最新年を選ぶ。
@@ -1341,7 +1349,28 @@ function searchKey(a) {
   return a._sk;
 }
 
+/* ---------- 開発者モード（裏コマンド） ----------
+   検索欄に合言葉（DEV_COMMAND）を入力するとON/OFFがトグルされる（検索は実行されない）。
+   状態は isDevMode() と body.dev-mode クラスで参照でき、隠し機能（今後のR-18一覧など）の
+   表示ゲートとして使う。現時点で隠しているUIはない（仕組みのみ）。 */
+const DEV_COMMAND = "animemo-dev";
+function isDevMode() { return devMode; }
+function applyDevMode() { document.body.classList.toggle("dev-mode", devMode); }
+function toggleDevMode() {
+  devMode = !devMode;
+  try { localStorage.setItem(DEV_KEY, devMode ? "1" : "0"); } catch (e) {}
+  applyDevMode();
+  toast(devMode ? "🛠 開発者モード ON" : "開発者モード OFF");
+  render();   // 将来ゲート対象のUIが増えたとき即座に反映されるよう再描画
+}
+
 function onSearch() {
+  const raw = document.getElementById("search").value.trim();
+  if (raw.toLowerCase() === DEV_COMMAND) {   // 裏コマンド: 入力を消してモードをトグル
+    document.getElementById("search").value = "";
+    toggleDevMode();
+    return;
+  }
   saveScroll();                          // 検索開始前のビュー位置を保存
   query = kanaFold(document.getElementById("search").value.trim());
   activeScrollKey = viewScrollKey();     // query の有無でキーが変わる（検索中は search:〜）
