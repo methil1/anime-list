@@ -520,6 +520,26 @@
   .info-card .ic-cv { color: var(--accent-soft); }
   .info-card .ic-more { color: var(--text-faint); }
   .info-card .ic-note { margin-top: 8px; padding-top: 7px; border-top: 1px solid var(--border); font-size: 0.79rem; color: var(--text-dim); line-height: 1.5; }
+  /* ---------- アニメ9選 ---------- */
+  .b9-head { display: flex; align-items: baseline; gap: 10px; margin: 18px 0 4px; }
+  .b9-head h2 { font-size: 18px; margin: 0; }
+  .b9-cnt { color: var(--text-dim); font-size: 13px; }
+  .b9-note { color: var(--text-dim); font-size: 13px; margin: 4px 0 12px; }
+  .best9-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 520px; margin-bottom: 14px; }
+  .best9-slot { position: relative; aspect-ratio: 2/3; border-radius: 10px; overflow: hidden;
+    cursor: pointer; background: var(--bg-elev); border: 1px solid var(--border); }
+  .best9-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .best9-slot .b9-ttl { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 8px 6px;
+    font-size: 12px; font-weight: 700; background: linear-gradient(transparent, rgba(8, 9, 12, .92));
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .best9-slot.empty { display: flex; align-items: center; justify-content: center;
+    border: 2px dashed var(--border); color: var(--text-dim); font-size: 26px; cursor: default; }
+  .best9-slot.swap-src { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .b9-actions { margin-bottom: 20px; }
+  .poster.b9-on { outline: 3px solid var(--accent); outline-offset: -3px; }
+  .b9-mark { position: absolute; top: 6px; left: 6px; z-index: 2; background: var(--accent); color: #fff;
+    font-weight: 800; font-size: 13px; width: 22px; height: 22px; border-radius: 50%;
+    display: flex; align-items: center; justify-content: center; }
 </style>
 </head>
 <body>
@@ -579,6 +599,7 @@
             <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着更新分</button>
             <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
             <button class="ytab" id="calendar-btn" onclick="openCalendar()">📅 放送カレンダー</button>
+            <button class="ytab collection" id="best9-btn" onclick="goBest9()">🏆 アニメ9選</button>
             <button class="ytab" id="score-btn" onclick="toggleScores()">★ 海外評価値表示</button>
           </div>
         </div>
@@ -616,6 +637,7 @@ const HISTORY_KEY = "animeTV.history.v1"; // 視聴タイムライン（履歴�
 const HISTORY_MAX = 5000;                 // 履歴の上限件数（肥大化防止）
 const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
 const COMPARE_KEY = "animeTV.compare.v1"; // 比較相手の視聴データ { name, watch:{id:{s,ep,r}}, importedAt }
+const BEST9_KEY = "animeTV.best9.v1";     // アニメ9選（id配列・最大9件、並び=3×3グリッドの枠順）。※キー定数はここで定義（TDZ回避）
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
 const SEASON_ORDER = { WINTER: 0, SPRING: 1, SUMMER: 2, FALL: 3, OVA: 4, MOVIE: 5 };
@@ -642,7 +664,9 @@ let history = loadHistory();   // 視聴タイムライン（新着順の配列 
 let series = loadSeries();   // シリーズ単位の「見たい」/「興味なし」 { want:{key:1}, hide:{key:-2} }
 let compare = loadCompare(); // 比較相手の視聴データ（null か {name, watch, importedAt}）
 let compareCat = "all";      // 比較ビューの絞り込み: "all" | "both"(共通) | "mine"(自分のみ) | "theirs"(相手のみ)
-let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare" | "timeline"
+let best9 = loadBest9();     // アニメ9選（id配列・最大9件、並び=3×3グリッドの枠順）
+let best9SwapIdx = null;     // 9選グリッドで入れ替え元に選択中の枠index（null=未選択）
+let view = { mode: "year", year: null };   // mode: "year" | "collection" | "recent" | "reco" | "series" | "compare" | "timeline" | "best9"
 let collectionSort = "season";   // 視聴コレクション内の並び: "season"(年代/クール別) | "rating"(自己評価別)
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
@@ -885,6 +909,20 @@ function saveSeries() {
   try { localStorage.setItem(SERIES_KEY, JSON.stringify(series)); }
   catch (e) { alert("保存に失敗: " + e.message); }
 }
+/* ---------- アニメ9選の永続化 ----------
+   best9 = 選んだ作品idの配列（最大9件、並び順=3×3グリッドの枠順）。
+   ※ BEST9_KEY は WATCH_KEY 隣で定義（初期化時参照の TDZ 回避、SERIES_KEY と同じ理由）。 */
+function loadBest9() {
+  try {
+    const r = localStorage.getItem(BEST9_KEY);
+    if (r) { const o = JSON.parse(r); if (Array.isArray(o)) return o.filter(x => x != null).slice(0, 9); }
+  } catch (e) { console.error(e); }
+  return [];
+}
+function saveBest9() {
+  try { localStorage.setItem(BEST9_KEY, JSON.stringify(best9)); }
+  catch (e) { alert("保存に失敗: " + e.message); }
+}
 // フランチャイズ統合: 劇場版などサブタイトルが毎作変わり、ベースタイトルでまとめられない
 // 長期シリーズを 1 つのキーに束ねる。原題に対するパターンで判定する（追加もここだけで済む）。
 const FRANCHISE_RULES = [
@@ -1108,6 +1146,8 @@ function renderYearbar() {
   if (sb) { sb.style.display = (view.mode === "reco" || view.mode === "series") ? "" : "none"; sb.classList.toggle("active", view.mode === "series"); }
   const pb = document.getElementById("compare-btn");   // 比較相手読込済みなら名前入りラベルに
   if (pb) { pb.classList.toggle("active", view.mode === "compare"); pb.textContent = compare ? `🆚 ${compare.name}と比較` : "🆚 比較ファイルを追加"; }
+  const b9 = document.getElementById("best9-btn");
+  if (b9) b9.classList.toggle("active", view.mode === "best9");
 }
 function goYear(y) { navigate(() => { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; }); }
 function goCollection() { navigate(() => { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; }); }
@@ -1120,6 +1160,7 @@ function collectionSortBar() {
 function goReco() { navigate(() => { view = { mode: "reco", year: null }; recoShowHidden = false; recoShowSeriesHidden = false; query = ""; document.getElementById("search").value = ""; }); }
 function goTimeline() { navigate(() => { view = { mode: "timeline", year: null }; query = ""; document.getElementById("search").value = ""; }); }
 function goSeries() { navigate(() => { view = { mode: "series", year: null }; query = ""; document.getElementById("search").value = ""; }); }
+function goBest9() { navigate(() => { view = { mode: "best9", year: null }; best9SwapIdx = null; query = ""; document.getElementById("search").value = ""; }); }
 // 視聴比較ビューへ。比較相手データが無ければインポートを促す。
 function goCompare() {
   if (!compare) { importCompare(); return; }
@@ -1583,6 +1624,160 @@ function renderContextPanel() {
   else el.innerHTML = "";
 }
 
+/* ---------- アニメ9選 ----------
+   視聴済みの中から9作品を選んで3×3グリッドに並べ、タイトル付きJPEG画像として書き出す。
+   ・プールのタイルをクリック → 空き枠に追加（選択済みなら解除）
+   ・グリッドの枠をクリック → 入れ替え元として選択、別の枠をクリックで位置交換
+   ・グリッドの枠を右クリック → その作品を外す（後ろを詰める） */
+function toggleBest9(id) {
+  const i = best9.indexOf(id);
+  if (i >= 0) best9.splice(i, 1);
+  else {
+    if (best9.length >= 9) { toast("9枠すべて埋まっています。枠を右クリックで外してから追加してください"); return; }
+    best9.push(id);
+  }
+  best9SwapIdx = null;
+  saveBest9(); render();
+}
+function best9SlotClick(i) {
+  if (i >= best9.length) return;                 // 空き枠は何もしない
+  if (best9SwapIdx === null) best9SwapIdx = i;   // 入れ替え元を選択
+  else if (best9SwapIdx === i) best9SwapIdx = null;   // 同じ枠 → 選択解除
+  else {
+    [best9[best9SwapIdx], best9[i]] = [best9[i], best9[best9SwapIdx]];
+    best9SwapIdx = null; saveBest9();
+  }
+  render();
+}
+function best9SlotRemove(e, i) {
+  e.preventDefault();
+  best9.splice(i, 1); best9SwapIdx = null;
+  saveBest9(); render();
+  return false;
+}
+// プール用の軽量タイル（posterHtml と違い左クリック=9選への追加/解除。cycle は発火させない）
+function best9PickHtml(a) {
+  const n = best9.indexOf(a.id);
+  const img = a.img
+    ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
+    : `<div class="noimg">${esc(a.t)}</div>`;
+  const r = ratingOf(a.id);
+  return `<article class="poster b9-pick${n >= 0 ? " b9-on" : ""}" onclick="toggleBest9(${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
+    ${img}
+    ${n >= 0 ? `<span class="b9-mark">${n + 1}</span>` : ""}
+    <div class="meta"><div class="ttl">${esc(a.t)}</div><div class="sub">${r ? `<span class="myrate">★${r}</span>` : ""}</div></div>
+  </article>`;
+}
+function renderBest9(el) {
+  const slots = [];
+  for (let i = 0; i < 9; i++) {
+    const a = best9[i] != null ? catalog.find(x => x.id === best9[i]) : null;
+    if (a) {
+      const img = a.img
+        ? `<img src="${esc(a.img)}" alt="" loading="lazy">`
+        : `<div class="noimg">${esc(a.t)}</div>`;
+      slots.push(`<div class="best9-slot filled${best9SwapIdx === i ? " swap-src" : ""}" onclick="best9SlotClick(${i})" oncontextmenu="return best9SlotRemove(event,${i})" title="クリック=入れ替え選択 ／ 右クリック=外す">
+        ${img}<div class="b9-ttl">${esc(a.t)}</div></div>`);
+    } else {
+      slots.push('<div class="best9-slot empty">＋</div>');
+    }
+  }
+  // 選択プール: 視聴済み（done/maybe/watching）を自己評価→海外評価の順で表示。検索で絞り込み可。
+  const pool = catalog
+    .filter(a => ["done", "maybe", "watching"].includes(statusOf(a.id)))
+    .filter(a => !query || searchKey(a).includes(query))
+    .sort((x, y) => (ratingOf(y.id) - ratingOf(x.id)) || ((y.sc || 0) - (x.sc || 0)));
+  el.innerHTML = `
+    <section class="best9">
+      <div class="b9-head"><h2>🏆 アニメ9選</h2><span class="b9-cnt">${best9.length} / 9</span></div>
+      <p class="b9-note">下の視聴済み一覧から9作品を選んでください。枠クリック=入れ替え元を選択→別の枠クリックで位置交換、右クリックで外せます。</p>
+      <div class="best9-grid">${slots.join("")}</div>
+      <div class="b9-actions"><button class="ytab collection" onclick="exportBest9()" ${best9.length ? "" : "disabled"}>📸 画像として保存</button></div>
+      <div class="b9-head"><h2>視聴済みから選ぶ</h2><span class="b9-cnt">${pool.length}作品${query ? "（検索中）" : ""}</span></div>
+      ${pool.length ? `<div class="grid">${pool.map(best9PickHtml).join("")}</div>` : '<p class="b9-note">視聴済みの作品がありません。先に作品を視聴済みにマークしてください。</p>'}
+    </section>`;
+}
+/* 9選のJPEG書き出し。AniList の画像CDNは Access-Control-Allow-Origin を返すため、
+   crossOrigin="anonymous" でロードすれば canvas を汚染せずポスターを直接描画できる
+   （上の exportImage がテキストのみなのは crossOrigin 未指定時代の制約）。 */
+async function exportBest9() {
+  const items = best9.map(id => catalog.find(a => a.id === id)).filter(Boolean);
+  if (items.length === 0) { alert("作品が選ばれていません。"); return; }
+  const date = new Date().toISOString().slice(0, 10);
+  toast("画像を生成中…");
+  // ポスターを CORS 付きで並行ロード。失敗した枠はグレー地+タイトルで代替描画する。
+  const imgs = await Promise.all(items.map(a => new Promise(res => {
+    if (!a.img) return res(null);
+    const im = new Image();
+    im.crossOrigin = "anonymous";
+    im.onload = () => res(im);
+    im.onerror = () => res(null);
+    im.src = a.img;
+  })));
+
+  const cell = 240, gap = 14, pad = 40, titleH = 34, headerH = 96;
+  const ph = cell * 3 / 2;   // ポスターは 2:3 比
+  const W = pad * 2 + cell * 3 + gap * 2;
+  const H = headerH + (ph + titleH) * 3 + gap * 2 + pad - titleH + 26;
+
+  const scale = 2;
+  const canvas = document.createElement("canvas");
+  canvas.width = W * scale; canvas.height = H * scale;
+  const ctx = canvas.getContext("2d");
+  ctx.scale(scale, scale);
+  const JP = '"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN",sans-serif';
+
+  ctx.fillStyle = "#0d0e12"; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = "#7c5cff"; ctx.fillRect(0, 0, W, 6);
+  ctx.fillStyle = "#e8eaef"; ctx.font = `800 30px ${JP}`;
+  ctx.fillText("私のアニメ9選", pad, 56);
+  ctx.fillStyle = "#5f6675"; ctx.font = `400 14px ${JP}`;
+  ctx.fillText(`${date} 書き出し`, pad, 80);
+
+  for (let i = 0; i < 9; i++) {
+    const col = i % 3, row = (i / 3) | 0;
+    const x = pad + col * (cell + gap);
+    const y = headerH + row * (ph + titleH + gap);
+    const a = items[i];
+    if (!a) {   // 空き枠は薄い枠線のみ
+      ctx.strokeStyle = "#272b36";
+      ctx.strokeRect(x + .5, y + .5, cell - 1, ph - 1);
+      continue;
+    }
+    const im = imgs[i];
+    if (im) {
+      // object-fit: cover 相当の中央クロップ
+      const sr = im.width / im.height, dr = cell / ph;
+      let sx = 0, sy = 0, sw = im.width, sh = im.height;
+      if (sr > dr) { sw = im.height * dr; sx = (im.width - sw) / 2; }
+      else { sh = im.width / dr; sy = (im.height - sh) / 2; }
+      ctx.drawImage(im, sx, sy, sw, sh, x, y, cell, ph);
+    } else {
+      ctx.fillStyle = "#15171e"; ctx.fillRect(x, y, cell, ph);
+      ctx.fillStyle = "#5f6675"; ctx.font = `400 13px ${JP}`;
+      ctx.fillText("NO IMAGE", x + 14, y + ph / 2);
+    }
+    // タイトル（枠幅に収まるよう末尾を省略、既存 exportImage と同じ手法）
+    ctx.fillStyle = "#e8eaef"; ctx.font = `700 14px ${JP}`;
+    let t = a.t;
+    while (ctx.measureText(t).width > cell && t.length > 2) t = t.slice(0, -1);
+    if (t !== a.t) t += "…";
+    ctx.textAlign = "center";
+    ctx.fillText(t, x + cell / 2, y + ph + 22);
+    ctx.textAlign = "left";
+  }
+
+  try {
+    canvas.toBlob(b => {
+      if (!b) { alert("画像の生成に失敗しました。"); return; }
+      saveFile(b, `anime-best9-${date}.jpg`, "9選画像を書き出しました");
+    }, "image/jpeg", 0.92);
+  } catch (e) {
+    // 画像が CORS 非対応だった場合 toBlob が SecurityError を投げる保険
+    alert("画像の書き出しに失敗しました（ポスター画像のCORS制限の可能性）: " + e.message);
+  }
+}
+
 /* ---------- main render ---------- */
 function render() {
   renderStats();
@@ -1595,6 +1790,8 @@ function render() {
   if (view.mode === "reco" && !query) { renderReco(list); return; }
   if (view.mode === "series" && !query) { renderSeriesWant(list); return; }
   if (view.mode === "compare" && !query) { renderCompare(list); return; }
+  // 9選ビューは検索中も維持する（検索は下部の「視聴済みから選ぶ」プールの絞り込みに使う）
+  if (view.mode === "best9") { renderBest9(list); return; }
   if (view.mode === "collection" && collectionSort === "rating" && !query) { renderCollectionByRating(list); return; }
 
   let items;
