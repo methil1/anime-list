@@ -858,6 +858,19 @@ function isHidden(id) { return !!(watch[id] && watch[id].x); }
 // 状態を設定。unwatched は状態を消すが自分評価は保持する。
 function setStatus(id, status, ep) {
   const cur = watch[id] || {};
+  // 「視聴済」にした場合、話別記録のある作品（劇場以外・総話数が既知）は全話をチェック済みにする。
+  // 新規にチェックされた話は commitEps がタイムライン(履歴)へ第N話として記録し、状態も "done" に整える。
+  if (status === "done") {
+    const a = catalog.find(x => x.id === id);
+    const total = (a && a.f !== "MOVIE" && a.ep > 0) ? a.ep : 0;
+    if (total > 0) {
+      const all = [];
+      for (let i = 1; i <= total; i++) all.push(i);
+      commitEps(id, all, total);   // eps=[1..total] に埋め、新規話を履歴へ、状態を done に
+      renderContextPanel();
+      return;
+    }
+  }
   // 話別記録の無い作品（劇場等）を新たに「視聴済」にした時は作品単位イベントを履歴へ。
   if (status === "done" && cur.s !== "done" && !(Array.isArray(cur.eps) && cur.eps.length)) pushHistory(id, 0);
   const e = {};
