@@ -1164,6 +1164,54 @@ def run_airing_fill(batch=50):
     print(f"\n完了: {done} 件処理／うち予定表から暫定補完 {filled} 件（{OUT_PATH} 更新済み）。", flush=True)
 
 
+# ---------- 話数の確定取り込み ----------
+# 暫定話数(epEst=1)や未確定(ep=None)は、放送終了後に AniList 側で episodes が確定する。
+# ただし run_range_merge は既存レコードを id で読み飛ばすため、--update を何度回しても
+# 確定値は入ってこない（＝ずっと「（暫定）」表示のまま）。対象レコードだけを id_in で
+# 引き直して上書きするのがこのモード。
+CONFIRM_EP_QUERY = ("query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { "
+                    "id episodes status } } }")
+
+
+def run_episode_confirm(batch=50):
+    """暫定(epEst)・未確定(ep=None)の直近TV/ショートに AniList の確定話数を取り込む。
+    status=FINISHED かつ episodes が非 null のときだけ ep を上書きし epEst を削除＝確定。
+    放送中(RELEASING)・未放送は確定待ちなので暫定のまま据え置く。
+    手動クール補正(co)済みは対象外。各バッチ後にチェックポイント保存。"""
+    existing = load_existing()
+    anime = list(existing.get("anime", []))
+    by_id = {a["id"]: a for a in anime}
+    todo = [a["id"] for a in anime
+            if a.get("f") in ("TV", "SHORT")
+            and not a.get("co")               # 手動クール補正済み(Slime4期等)は除外
+            and (a.get("y") or 0) >= EPFILL_MIN_YEAR
+            and ("epEst" in a or a.get("ep") is None)]
+    print(f"話数の確定取り込み対象: {len(todo)} 件（AniList）", flush=True)
+    done = 0
+    fixed = 0
+    for i in range(0, len(todo), batch):
+        ids = todo[i:i + batch]
+        data = post(CONFIRM_EP_QUERY, {"ids": ids})
+        if "errors" in data:
+            print(f"    AniList error: {data['errors']}", flush=True)
+            time.sleep(3)
+            continue
+        for m in data["data"]["Page"]["media"]:
+            rec = by_id.get(m["id"])
+            if rec is None:
+                continue
+            ep = m.get("episodes")
+            if m.get("status") == "FINISHED" and isinstance(ep, int) and ep > 0:
+                rec["ep"] = ep
+                rec.pop("epEst", None)   # 暫定/試行済みマークを外す＝確定
+                fixed += 1
+            done += 1
+        print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
+        write_catalog(anime)   # バッチ毎チェックポイント
+        time.sleep(1.0)
+    print(f"\n完了: {done} 件照会／うち確定 {fixed} 件（{OUT_PATH} 更新済み）。", flush=True)
+
+
 # ---------- なろう原作判定 ----------
 # AniList の source はなろう発かどうかを区別しない（書籍化済みは LIGHT_NOVEL になる）ため、
 # なろう公式API (https://dev.syosetu.com/man/api/) でタイトル完全一致検索して判定する。
@@ -1623,13 +1671,15 @@ ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下
 
 
 def run_update():
-    """四半期ごとの自動更新用。現在の年の TV/ショート(クール)・劇場・OVA に加え、
+    """定期自動更新用（毎月 1 日・16 日）。現在の年の TV/ショート(クール)・劇場・OVA に加え、
     人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。
+    続けて暫定話数の確定取り込み（放送が終わった作品の「（暫定）」を外す）を行い、
     最後に新規追加分（nr/kk/mg 未判定）のなろう・カクヨム・漫画雑誌判定も行う。"""
     cur = date.today().year
     print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
     run_ona_jp_merge(ONA_JP_FLOOR)
+    run_episode_confirm()
     run_narou()
     run_kakuyomu()
     run_magazine()
@@ -1696,6 +1746,9 @@ def main():
     elif args and args[0] == "--airing":
         # ep 未確定の直近TV/ショートに AniList 放送予定表の最終話番号を暫定補完(方式A)。
         run_airing_fill()
+    elif args and args[0] == "--confirm-eps":
+        # 暫定(epEst)/未確定の話数を、放送終了済みなら AniList の確定値で上書き。
+        run_episode_confirm()
     elif args and args[0] == "--authors":
         # 原作者(au)をバックフィル。ENRICH_QUERY に staff を含むので run_enrich で au が付く。
         run_enrich(predicate=lambda a: ("--force" in args) or "au" not in a)
