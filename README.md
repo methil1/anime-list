@@ -28,7 +28,7 @@
 - **ホバー情報カード** — 原作種別（なろう発／カクヨム発／漫画は連載誌系統バッジ付き）・制作会社・メインキャラ＋CV・放映日時／公開日／発売日を表示。
 - **右クリックメニュー** — 話数記録モーダル、Wikipedia / AniList / 公式サイト / プライム・ビデオ・各配信サービス検索へのリンク、自己評価（★1〜5）・視聴状態の設定、おすすめ除外・シリーズの見たい／興味なし操作。
 - **書き出し** — 視聴記録を JSON / CSV / コレクション画像（JPEG）でエクスポート。
-- **四半期自動更新** — Windows タスクスケジューラで現行年のクール／劇場／OVA を自動再取得・コミット・プッシュ。
+- **毎月自動更新** — 毎月 1 日・16 日に Windows タスクスケジューラで現行年のクール／劇場／OVA を自動再取得・コミット・プッシュ。
 
 ---
 
@@ -39,7 +39,7 @@
 | `index.html` | カタログ閲覧 UI（HTML / CSS / JS を 1 ファイルに同梱）。 |
 | `anime-data.js` | `window.ANIME_CATALOG` への代入。CORS 回避のため `.json` ではなく `.js`。 |
 | `scrape_anime.py` | AniList GraphQL から取得し `anime-data.js` を生成するスクレイパー。 |
-| `auto_update.bat` | 四半期自動更新タスクが叩くバッチ（`--update` → git commit → push）。 |
+| `auto_update.bat` | 自動更新タスクが叩くバッチ（`--update` → git commit → push）。 |
 
 ローカルで見るには `index.html` をブラウザで直接開くだけです（`file://` で動作）。
 
@@ -123,6 +123,10 @@ python scrape_anime.py --add "とんがり帽子のアトリエ" 200769  # 個�
 python scrape_anime.py --enrich     # 原作/制作会社/キャラ/公式サイト等を後付け
 python scrape_anime.py --dates      # OVA/劇場の公開・発売日を後付け
 python scrape_anime.py --broadcast  # 旧作の放送曜日・時刻を MAL(Jikan API) から補完
+python scrape_anime.py --episodes   # ep 未確定の直近作に MAL(Jikan) の話数を暫定補完（epEst=1）
+python scrape_anime.py --airing     # 同上を AniList の放送予定表の最終話番号から暫定補完
+python scrape_anime.py --confirm-eps  # 暫定/未確定の話数を、放送終了済みなら AniList の確定値で確定
+                                    #   （--update に組込済。status=FINISHED のみ上書きし epEst を外す）
 python scrape_anime.py --stream     # 配信サービス(sv) を AniList の STREAMING リンクから後付け
 python scrape_anime.py --authors    # 原作者(au) を後付け
 python scrape_anime.py --narou      # 原作が小説系/その他の作品をなろう公式 API で照合し nr=1 付与
@@ -135,16 +139,23 @@ python scrape_anime.py --magazine   # 漫画原作(src=漫画)に連載誌系統
 
 ## ⏱️ 自動更新
 
-四半期ごと（1/1・4/1・7/1・10/1）に Windows タスクスケジューラ（タスク名 `AnimeCatalogQuarterly`）が `auto_update.bat` を実行し、
+**毎月 1 日・16 日の 9:00**（年 24 回）に Windows タスクスケジューラ（タスク名 `AnimeCatalogMonthly`）が `auto_update.bat` を実行し、
 `python scrape_anime.py --update` → `git add anime-data.js` → commit → `git push origin main` を自動で行います。
 当日 PC がオフでも、次回起動時に実行されます（`StartWhenAvailable`）。
 
 再登録:
 
 ```bash
-schtasks /create /tn AnimeCatalogQuarterly /tr <auto_update.bat のフルパス> ^
-  /sc MONTHLY /d 1 /m JAN,APR,JUL,OCT /st 12:00 /f
+schtasks /create /tn AnimeCatalogMonthly /tr <auto_update.bat のフルパス> ^
+  /sc MONTHLY /d 1 /st 09:00 /f
 ```
+
+> `schtasks` の `/d` に `1,16` のような複数日は指定できません（`ERROR: Invalid value for /D option.`）。
+> また `schtasks` で作ったタスクには `StartWhenAvailable` が付きません。
+> **16 日のトリガー追加**と**「スケジュールされた時刻にタスクを開始できなかった場合、すぐにタスクを開始する」**は
+> タスクスケジューラ GUI で設定するか、エクスポート済み XML を
+> `schtasks /create /tn AnimeCatalogMonthly /xml <XMLのパス> /f` で復元してください。
+> エクスポートした XML には Windows の SID とアカウント名が含まれるため、リポジトリにはコミットしないこと。
 
 > `.bat` のコメントは cp932 化け回避のため ASCII のみにしてください。git 認証は Windows 資格情報マネージャ依存です。
 
