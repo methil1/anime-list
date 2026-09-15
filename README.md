@@ -125,8 +125,9 @@ python scrape_anime.py --dates      # OVA/劇場の公開・発売日を後付�
 python scrape_anime.py --broadcast  # 旧作の放送曜日・時刻を MAL(Jikan API) から補完
 python scrape_anime.py --episodes   # ep 未確定の直近作に MAL(Jikan) の話数を暫定補完（epEst=1）
 python scrape_anime.py --airing     # 同上を AniList の放送予定表の最終話番号から暫定補完
-python scrape_anime.py --confirm-eps  # 暫定/未確定の話数を、放送終了済みなら AniList の確定値で確定
-                                    #   （--update に組込済。status=FINISHED のみ上書きし epEst を外す）
+python scrape_anime.py --refresh-airing  # 直近TV/ショートの話数(ep)と放送終了日(ed)を AniList から引き直す
+                                    #   （--update に組込済。FINISHED なら epEst を外して確定。旧名 --confirm-eps も可）
+                                    #   ed は放送予定表の最終話の日付。クール跨ぎ（1クール/2クール）の判定に使う
 python scrape_anime.py --stream     # 配信サービス(sv) を AniList の STREAMING リンクから後付け
 python scrape_anime.py --authors    # 原作者(au) を後付け
 python scrape_anime.py --narou      # 原作が小説系/その他の作品をなろう公式 API で照合し nr=1 付与

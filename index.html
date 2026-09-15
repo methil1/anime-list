@@ -1027,13 +1027,31 @@ function courCount(ep) {
   if (ep > 13) return Math.max(2, Math.round(ep / 13));
   return 1;
 }
+// 放送終了日(ed)で継続判定するとき、cc 開始からこの日数以上あとまで放送が続く作品だけを継続扱いにする。
+// 前クールの最終話が1〜2本はみ出すだけの1クール作品を「継続中」にしないため。
+const CONT_MIN_DAYS = 14;
+function dateInt(dt) { return dt.getFullYear() * 10000 + (dt.getMonth() + 1) * 100 + dt.getDate(); }
+// 作品 a の開始クールが cc より前か。
+function startedBefore(a, cc) {
+  const si = SEASON_CAL.indexOf(a.s);
+  if (si < 0) return false;
+  return a.y < cc.year || (a.y === cc.year && si < SEASON_CAL.indexOf(cc.season));
+}
 // 連続2〜3クール作品 a の放送期間が cour cc を含むか（開始クール自身も含む）。長期(>52話)・1クールは対象外。
+// 優先順位: 手動クール範囲(cs) → 放送終了日(ed, AniList 放送予定表由来) → 話数(ep)からの推定。
 function airsCourSpan(a, cc) {
   if (a.f !== "TV" && a.f !== "SHORT") return false;
   if (a.cs) return a.cs.includes(`${cc.year}-${cc.season}`);   // 手動クール範囲(分割/連続)を優先
   if (!SEASON_CAL.includes(a.s)) return false;
   const k = courCount(a.ep);
-  if (k < 2 || k >= 4) return false;
+  if (k >= 4) return false;
+  if (a.ed) {
+    if (a.y === cc.year && a.s === cc.season) return true;
+    if (!startedBefore(a, cc)) return false;
+    const edge = new Date(cc.year, SEASON_MONTH[cc.season] - 1, 1 + CONT_MIN_DAYS);
+    return a.ed >= dateInt(edge);
+  }
+  if (k < 2) return false;
   let yi = a.y, si = SEASON_CAL.indexOf(a.s);
   for (let n = 0; n < k; n++) {
     if (yi === cc.year && SEASON_CAL[si] === cc.season) return true;
@@ -1042,26 +1060,10 @@ function airsCourSpan(a, cc) {
   return false;
 }
 // 現クール cc に「継続放送中」として複製表示すべき作品（開始クールは別）を返す。
-// 対象: TV/ショートのクール作品で 2〜3クール（1クールは継続なし／4クール以上=長期は除外）、
-// かつ放送期間が cc を含み、かつ開始クールが cc 自身ではない（開始クールには既に表示済み）。
+// 対象: TV/ショートのクール作品で放送期間が cc に跨る（airsCourSpan）もの。4クール以上=長期は除外。
+// 開始クールが cc 自身の作品は開始クールに表示済みなので除く。
 function continuingInCour(cc) {
-  return catalog.filter(a => {
-    if (a.f !== "TV" && a.f !== "SHORT") return false;
-    if (!passStatus(a)) return false;
-    // 手動クール範囲(cs)がある作品は ep 由来の推定より優先。判明クールに含まれ、開始クールでなければ継続表示。
-    if (a.cs) return a.cs.includes(`${cc.year}-${cc.season}`) && !(a.y === cc.year && a.s === cc.season);
-    if (!SEASON_CAL.includes(a.s)) return false;
-    const k = courCount(a.ep);
-    if (k < 2 || k >= 4) return false;
-    let yi = a.y, si = SEASON_CAL.indexOf(a.s);
-    for (let n = 0; n < k; n++) {
-      if (yi === cc.year && SEASON_CAL[si] === cc.season) {
-        return !(a.y === cc.year && a.s === cc.season);
-      }
-      si++; if (si > 3) { si = 0; yi++; }
-    }
-    return false;
-  });
+  return catalog.filter(a => passStatus(a) && airsCourSpan(a, cc) && !(a.y === cc.year && a.s === cc.season));
 }
 function toast(msg) {
   const t = document.getElementById("toast");
@@ -1461,6 +1463,7 @@ function airStatus(a) {
   const todayInt = now.getFullYear() * 10000 + (now.getMonth() + 1) * 100 + now.getDate();
   const startInt = a.d % 100 === 0 ? a.d + 1 : a.d;   // 日不明(月初粒度)は月初扱い
   if (startInt > todayInt) return "upcoming";
+  if (a.ed && (a.f === "TV" || a.f === "SHORT")) return todayInt <= a.ed ? "airing" : "finished";   // 放送終了日が判明していれば最優先
   if (a.air && a.air * 1000 > now.getTime()) return "airing";   // 次回放送が未来＝放送中
   const cc = currentCour();
   if ((a.f === "TV" || a.f === "SHORT") && a.y === cc.year && a.s === cc.season) return "airing";
@@ -1475,10 +1478,17 @@ function airLabel(a) {
   return "";
 }
 // 現クール放送中の作品（開始クール作品＋別クール開始の継続作品）を重複排除して返す。
+// 前クール開始で最終話がまだ残っている作品（クール変わり直後の最終週など）も、今週の放送表には含める。
 function currentlyAiring() {
   const cc = currentCour();
+  const today = dateInt(new Date());
   const seen = new Map();
-  for (const a of catalog) if ((a.f === "TV" || a.f === "SHORT") && a.y === cc.year && a.s === cc.season) seen.set(a.id, a);
+  for (const a of catalog) {
+    if (a.f !== "TV" && a.f !== "SHORT") continue;
+    const startsNow = a.y === cc.year && a.s === cc.season;
+    const tail = a.ed && a.ed >= today && startedBefore(a, cc) && courCount(a.ep) < 4;
+    if (startsNow || tail) seen.set(a.id, a);
+  }
   for (const a of continuingInCour(cc)) seen.set(a.id, a);
   return [...seen.values()];
 }

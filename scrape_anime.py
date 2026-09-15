@@ -31,6 +31,9 @@ AniList から TV / ショート / 劇場アニメ一覧を取得し、
                                         #   AniList relations で原作漫画の MAL ID を引き、Jikan の連載誌を
                                         #   ジャンプ系/マガジン系/サンデー系/青年誌/少女・女性誌 等に正規化（未判定分のみ）。
                                         #   --force で全件再判定。
+    python scrape_anime.py --refresh-airing
+                                        # 直近TV/ショートの話数(ep)と放送終了日(ed)を AniList から引き直す。
+                                        #   ed はクール跨ぎ(1クール/2クール)判定に使う。--update に組込済。
 
 仕様:
   - TV/ショート: format TV / TV_SHORT を season/seasonYear（放送開始クール）ごとに取得。
@@ -49,7 +52,7 @@ import unicodedata
 import urllib.error
 import urllib.parse
 import urllib.request
-from datetime import date
+from datetime import date, timedelta
 
 # ハングル（韓国語）を含むタイトルを除外するための判定。
 # 日本のアニメリストにするため韓国作品（native/romaji がハングル）を弾く。
@@ -512,6 +515,48 @@ def airing_at(m):
         if n.get("airingAt"):
             return n["airingAt"]
     return None
+
+
+WEEK_SECONDS = 7 * 86400
+JST_OFFSET_SECONDS = 9 * 3600
+# 放送中(RELEASING)なのに予定表の最終放送がこれより前なら、予定表が途中までしか登録されていないとみなす。
+STALE_SCHEDULE_DAYS = 7
+
+
+def date_int(d):
+    """date を YYYYMMDD 整数にする。"""
+    return d.year * 10000 + d.month * 100 + d.day
+
+
+def jst_date_int(unix_sec):
+    """unix秒(UTC)を JST の YYYYMMDD 整数にする。"""
+    t = time.gmtime(unix_sec + JST_OFFSET_SECONDS)
+    return t.tm_year * 10000 + t.tm_mon * 100 + t.tm_mday
+
+
+def airing_end_int(m, today):
+    """放送終了日(ed=YYYYMMDD, JST)を返す。判定できなければ None。
+    airingSchedule の最終話の放送日を基準にし、予定表が総話数(episodes)まで未登録なら
+    残り話数を週1本で外挿する。endDate が判明していれば遅い方を採用。
+    放送中なのに終了日が today より STALE_SCHEDULE_DAYS 日以上前なら予定表が不完全なので None。"""
+    end = 0
+    nodes = ((m.get("airingSchedule") or {}).get("nodes")) or []
+    sched = [n for n in nodes if isinstance(n.get("episode"), int) and n.get("airingAt")]
+    if sched:
+        last = max(sched, key=lambda n: n["episode"])
+        at = last["airingAt"]
+        eps = m.get("episodes")
+        if isinstance(eps, int) and eps > last["episode"]:
+            at += (eps - last["episode"]) * WEEK_SECONDS
+        end = jst_date_int(at)
+    ed = m.get("endDate") or {}
+    if ed.get("year") and ed.get("month") and ed.get("day"):
+        end = max(end, ed["year"] * 10000 + ed["month"] * 100 + ed["day"])
+    if not end:
+        return None
+    if m.get("status") == "RELEASING" and end < date_int(today - timedelta(days=STALE_SCHEDULE_DAYS)):
+        return None
+    return end
 
 
 # 分割/連続の複数クール作品で AniList の episodes が未確定(null)等のものを手動補正する。
@@ -1164,34 +1209,40 @@ def run_airing_fill(batch=50):
     print(f"\n完了: {done} 件処理／うち予定表から暫定補完 {filled} 件（{OUT_PATH} 更新済み）。", flush=True)
 
 
-# ---------- 話数の確定取り込み ----------
-# 暫定話数(epEst=1)や未確定(ep=None)は、放送終了後に AniList 側で episodes が確定する。
-# ただし run_range_merge は既存レコードを id で読み飛ばすため、--update を何度回しても
-# 確定値は入ってこない（＝ずっと「（暫定）」表示のまま）。対象レコードだけを id_in で
-# 引き直して上書きするのがこのモード。
-CONFIRM_EP_QUERY = ("query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { "
-                    "id episodes status } } }")
+# ---------- 放送状況の引き直し（話数・放送終了日） ----------
+# run_range_merge は既存レコードを id で読み飛ばすため、--update を何度回しても放送中作品の
+# 話数(ep)は登録時のまま古くなる（例: 登録時 MAL 暫定12話 → 実際は24話の2クール）。
+# クール変わりの月初に「1クールで終わるのか、次クールも続くのか」が分からなくなる原因なので、
+# 直近TV/ショートを id_in で引き直し、話数と放送終了日(ed)を更新する。
+AIRING_REFRESH_QUERY = ("query ($ids: [Int]) { Page(perPage: 50) { media(id_in: $ids) { "
+                        "id episodes status endDate { year month day } "
+                        "airingSchedule(perPage: 100) { nodes { episode airingAt } } } } }")
+# 放送終了日(ed)がこの日数より前で話数も確定済みの作品は、もう変わらないので引き直さない。
+REFRESH_GRACE_DAYS = 30
 
 
-def run_episode_confirm(batch=50):
-    """暫定(epEst)・未確定(ep=None)の直近TV/ショートに AniList の確定話数を取り込む。
-    status=FINISHED かつ episodes が非 null のときだけ ep を上書きし epEst を削除＝確定。
-    放送中(RELEASING)・未放送は確定待ちなので暫定のまま据え置く。
-    手動クール補正(co)済みは対象外。各バッチ後にチェックポイント保存。"""
+def run_airing_refresh(batch=50):
+    """直近TV/ショートの話数(ep)と放送終了日(ed)を AniList から引き直す。
+    ep: AniList の episodes が判明していれば上書き。status=FINISHED なら epEst を外して確定。
+        手動クール補正(co)済みは ep を触らない（COUR_OVERRIDES の表示を優先）。
+    ed: airing_end_int で算出。フロントのクール跨ぎ判定が話数推定より優先して使う。
+    各バッチ後にチェックポイント保存。"""
     existing = load_existing()
     anime = list(existing.get("anime", []))
     by_id = {a["id"]: a for a in anime}
+    today = date.today()
+    settled_before = date_int(today - timedelta(days=REFRESH_GRACE_DAYS))
     todo = [a["id"] for a in anime
             if a.get("f") in ("TV", "SHORT")
-            and not a.get("co")               # 手動クール補正済み(Slime4期等)は除外
-            and (a.get("y") or 0) >= EPFILL_MIN_YEAR
-            and ("epEst" in a or a.get("ep") is None)]
-    print(f"話数の確定取り込み対象: {len(todo)} 件（AniList）", flush=True)
+            and (a.get("y") or 0) >= today.year - 1
+            and ("epEst" in a or a.get("ep") is None or (a.get("ed") or 99999999) >= settled_before)]
+    print(f"放送状況の引き直し対象: {len(todo)} 件（AniList）", flush=True)
     done = 0
     fixed = 0
+    ended = 0
     for i in range(0, len(todo), batch):
         ids = todo[i:i + batch]
-        data = post(CONFIRM_EP_QUERY, {"ids": ids})
+        data = post(AIRING_REFRESH_QUERY, {"ids": ids})
         if "errors" in data:
             print(f"    AniList error: {data['errors']}", flush=True)
             time.sleep(3)
@@ -1201,15 +1252,22 @@ def run_episode_confirm(batch=50):
             if rec is None:
                 continue
             ep = m.get("episodes")
-            if m.get("status") == "FINISHED" and isinstance(ep, int) and ep > 0:
+            if isinstance(ep, int) and ep > 0 and not rec.get("co"):
                 rec["ep"] = ep
-                rec.pop("epEst", None)   # 暫定/試行済みマークを外す＝確定
-                fixed += 1
+                if m.get("status") == "FINISHED":
+                    rec.pop("epEst", None)   # 暫定/試行済みマークを外す＝確定
+                    fixed += 1
+            end = airing_end_int(m, today)
+            if end:
+                rec["ed"] = end
+                ended += 1
+            else:
+                rec.pop("ed", None)
             done += 1
         print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
         write_catalog(anime)   # バッチ毎チェックポイント
         time.sleep(1.0)
-    print(f"\n完了: {done} 件照会／うち確定 {fixed} 件（{OUT_PATH} 更新済み）。", flush=True)
+    print(f"\n完了: {done} 件照会／話数確定 {fixed} 件・放送終了日判明 {ended} 件（{OUT_PATH} 更新済み）。", flush=True)
 
 
 # ---------- なろう原作判定 ----------
@@ -1673,13 +1731,13 @@ ONA_JP_FLOOR = 2000  # 自動更新で取り込む人気JP-ONAの popularity 下
 def run_update():
     """定期自動更新用（毎月 1 日・16 日）。現在の年の TV/ショート(クール)・劇場・OVA に加え、
     人気JP-ONA も取得して既存にマージする（新クール・新作・新規配信作の補完。軽量）。
-    続けて暫定話数の確定取り込み（放送が終わった作品の「（暫定）」を外す）を行い、
+    続けて放送中作品の話数・放送終了日を引き直し（クール跨ぎ判定と「（暫定）」の確定）、
     最後に新規追加分（nr/kk/mg 未判定）のなろう・カクヨム・漫画雑誌判定も行う。"""
     cur = date.today().year
     print(f"自動更新: {cur}年(クール/劇場/OVA) + 人気JP-ONA をマージ", flush=True)
     run_range_merge(cur, cur)
     run_ona_jp_merge(ONA_JP_FLOOR)
-    run_episode_confirm()
+    run_airing_refresh()
     run_narou()
     run_kakuyomu()
     run_magazine()
@@ -1746,9 +1804,9 @@ def main():
     elif args and args[0] == "--airing":
         # ep 未確定の直近TV/ショートに AniList 放送予定表の最終話番号を暫定補完(方式A)。
         run_airing_fill()
-    elif args and args[0] == "--confirm-eps":
-        # 暫定(epEst)/未確定の話数を、放送終了済みなら AniList の確定値で上書き。
-        run_episode_confirm()
+    elif args and args[0] in ("--refresh-airing", "--confirm-eps"):
+        # 直近TV/ショートの話数(ep)・放送終了日(ed)を引き直す。--confirm-eps は旧名。
+        run_airing_refresh()
     elif args and args[0] == "--authors":
         # 原作者(au)をバックフィル。ENRICH_QUERY に staff を含むので run_enrich で au が付く。
         run_enrich(predicate=lambda a: ("--force" in args) or "au" not in a)
