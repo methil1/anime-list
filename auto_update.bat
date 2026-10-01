@@ -6,7 +6,7 @@ REM  Can also be run manually by double-clicking this file.
 REM ============================================================
 chcp 65001 >nul
 set PYTHONIOENCODING=utf-8
-set PY="C:\Users\nagi3\AppData\Local\Programs\Python\Python310\python.exe"
+set PY="C:\Users\nagi3\AppData\Local\Python\pythoncore-3.14-64\python.exe"
 cd /d "D:\Claude\Everything-claude-code\anime-list"
 
 echo ============================================================>> auto_update.log
