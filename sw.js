@@ -1,5 +1,5 @@
-/* アニメモ！ Service Worker — オフライン起動とポスター画像キャッシュ */
-const CORE_CACHE = "animemo-core-v3";
+/* アニメモ！ Service Worker — オフライン起動（ネットワーク優先）とポスター画像キャッシュ */
+const CORE_CACHE = "animemo-core-v4";
 const IMG_CACHE = "animemo-img-v1";
 // 中核アセット（オフラインでも起動できるよう install 時にプリキャッシュ）
 const CORE = [
@@ -32,21 +32,20 @@ self.addEventListener("fetch", (e) => {
   if (req.method !== "GET") return;
   const url = new URL(req.url);
 
-  // 同一オリジンの中核アセット: キャッシュ優先（更新はバックグラウンドで取得）
+  // 同一オリジンの中核アセット: ネットワーク優先（更新を1回目の読み込みから反映する）。
+  // cache:"no-cache" でブラウザのHTTPキャッシュ(GitHub Pagesは10分)も再検証させ、
+  // 変更が無ければ 304 で軽く済む。キャッシュはオフライン時のフォールバックにだけ使う。
   if (url.origin === self.location.origin) {
     e.respondWith(
-      caches.match(req).then((hit) => {
-        const net = fetch(req)
-          .then((res) => {
-            if (res && res.ok) {
-              const copy = res.clone();
-              caches.open(CORE_CACHE).then((c) => c.put(req, copy));
-            }
-            return res;
-          })
-          .catch(() => hit || caches.match("./index.html"));
-        return hit || net;
-      })
+      fetch(req, { cache: "no-cache" })
+        .then((res) => {
+          if (res && res.ok) {
+            const copy = res.clone();
+            caches.open(CORE_CACHE).then((c) => c.put(req, copy));
+          }
+          return res;
+        })
+        .catch(() => caches.match(req).then((hit) => hit || caches.match("./index.html")))
     );
     return;
   }
