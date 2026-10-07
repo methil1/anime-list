@@ -519,6 +519,17 @@ def airing_at(m):
 
 WEEK_SECONDS = 7 * 86400
 JST_OFFSET_SECONDS = 9 * 3600
+
+
+def first_airing_at(m):
+    """1話の放送時刻(air=unix秒UTC)を返す。フロントの放送カレンダーはこれを起点に週ごとに並べる。
+    予定表が途中の話からしか無い場合は、最小の話数から週単位で1話まで遡って求める。無ければ None。"""
+    nodes = ((m.get("airingSchedule") or {}).get("nodes")) or []
+    usable = [n for n in nodes if isinstance(n.get("episode"), int) and n.get("airingAt")]
+    if not usable:
+        return None
+    first = min(usable, key=lambda n: n["episode"])
+    return first["airingAt"] - (first["episode"] - 1) * WEEK_SECONDS
 # 放送中(RELEASING)なのに予定表の最終放送がこれより前なら、予定表が途中までしか登録されていないとみなす。
 STALE_SCHEDULE_DAYS = 7
 
@@ -1226,6 +1237,7 @@ def run_airing_refresh(batch=50):
     ep: AniList の episodes が判明していれば上書き。status=FINISHED なら epEst を外して確定。
         手動クール補正(co)済みは ep を触らない（COUR_OVERRIDES の表示を優先）。
     ed: airing_end_int で算出。フロントのクール跨ぎ判定が話数推定より優先して使う。
+    air: first_airing_at で算出（放送カレンダーの起点）。予定表が無ければ既存値を残す。
     各バッチ後にチェックポイント保存。"""
     existing = load_existing()
     anime = list(existing.get("anime", []))
@@ -1263,6 +1275,9 @@ def run_airing_refresh(batch=50):
                 ended += 1
             else:
                 rec.pop("ed", None)
+            air = first_airing_at(m)
+            if air is not None:
+                rec["air"] = air   # 追加時に予定表が未公開だった作品もここで埋まる
             done += 1
         print(f"    {done}/{len(todo)} 件処理 ...", flush=True)
         write_catalog(anime)   # バッチ毎チェックポイント
