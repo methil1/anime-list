@@ -171,6 +171,10 @@
   .cal-btn { background: var(--bg-elev); border: 1px solid var(--border-strong); color: var(--text-dim);
     padding: 7px 15px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all .12s; }
   .cal-btn:hover { color: var(--text); border-color: var(--text-faint); }
+  .cal-ics { position: relative; }
+  .cal-ics-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; flex-direction: column; gap: 6px;
+    padding: 8px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45); white-space: nowrap; }
+  .cal-ics-menu.open { display: flex; }
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-dow { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--text-faint); padding-bottom: 2px; }
   .cal-dow.sun { color: var(--dropped); }
@@ -1606,8 +1610,80 @@ function renderCalendar() {
       <button class="cal-nav" onclick="calNav(1)" title="次の月">›</button>
       <button class="cal-btn" onclick="calToday()">今月</button>
       <span class="cal-spacer"></span>
+      <span class="cal-ics">
+        <button class="cal-btn" onclick="toggleIcsMenu(event)" title="放送予定をカレンダーアプリ用の .ics ファイルで書き出す">📥 .ics書き出し</button>
+        <span class="cal-ics-menu" id="cal-ics-menu">
+          <button class="cal-btn" onclick="exportIcs('mine')">視聴中・視聴予定の作品</button>
+          <button class="cal-btn" onclick="exportIcs('all')">放送中の全作品</button>
+        </span>
+      </span>
       <button class="cal-btn" onclick="closeCalendar()">✕ 閉じる</button>
     </div>${body}`;
+}
+// ---- 放送予定の .ics 書き出し（Googleカレンダー等に読み込む用）----
+// ==ICS-BEGIN==（tests/test_ics.py がこの範囲を切り出して node で検証する。DOM に触れないこと）
+const ICS_WEEK = 7 * 86400;
+function icsEscape(s) { return String(s).replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\r\n|\r|\n/g, "\\n"); }
+// RFC 5545: 1行75オクテットを超えたら CRLF＋空白で折り返す（UTF-8 の文字途中では切らない）
+function icsFold(line) {
+  let out = "", bytes = 0;
+  for (const ch of line) {
+    const c = ch.codePointAt(0), n = c < 0x80 ? 1 : c < 0x800 ? 2 : c < 0x10000 ? 3 : 4;
+    if (bytes + n > 75) { out += "\r\n "; bytes = 1; }
+    out += ch; bytes += n;
+  }
+  return out;
+}
+function icsStamp(sec) { return new Date(sec * 1000).toISOString().replace(/[-:]/g, "").replace(/\.\d{3}/, ""); }
+function icsJstDateInt(sec) { const d = new Date(sec * 1000 + 9 * 3600000); return d.getUTCFullYear() * 10000 + (d.getUTCMonth() + 1) * 100 + d.getUTCDate(); }
+// shows: [{id, t, f, air, ep, ed}]、now: unix秒。air(1話の放送時刻)から毎週1話ずつ、放送が終わっていない回だけ VEVENT にする。
+// 話数(ep)が未発表でも放送終了日(ed, JST)が分かればその日まで出し、ed を過ぎる回は ep があっても出さない。
+// air が無い・話数も ed も分からない作品は日付を決められないので除外し skipped に数える。時刻は UTC(Z) で書くので VTIMEZONE は不要。
+function buildIcs(shows, now) {
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//anime-list//broadcast calendar//JA", "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH", "X-WR-CALNAME:アニメ放送予定", "X-WR-TIMEZONE:Asia/Tokyo"];
+  let events = 0, used = 0, skipped = 0;
+  for (const a of shows) {
+    const epKnown = a.ep > 0 && a.ep <= 200;
+    if (!a.air || (!epKnown && !a.ed)) { skipped++; continue; }
+    const dur = (a.f === "SHORT" ? 5 : 30) * 60;
+    let any = false;
+    for (let k = 0; k < (epKnown ? a.ep : 200); k++) {
+      const start = a.air + k * ICS_WEEK;
+      if (a.ed && icsJstDateInt(start) > a.ed) break;
+      if (start + dur <= now) continue;
+      lines.push("BEGIN:VEVENT", `UID:anime-${a.id}-ep${k + 1}@methil1.github.io`, `DTSTAMP:${icsStamp(now)}`,
+        `DTSTART:${icsStamp(start)}`, `DTEND:${icsStamp(start + dur)}`, `SUMMARY:${icsEscape(`${a.t} 第${k + 1}話`)}`,
+        `URL:https://anilist.co/anime/${a.id}`, "END:VEVENT");
+      events++; any = true;
+    }
+    if (any) used++;
+  }
+  lines.push("END:VCALENDAR");
+  return { text: lines.map(icsFold).join("\r\n") + "\r\n", events, shows: used, skipped };
+}
+// ==ICS-END==
+function toggleIcsMenu(ev) {
+  ev.stopPropagation();
+  document.getElementById("cal-ics-menu").classList.toggle("open");
+}
+document.addEventListener("click", () => { const m = document.getElementById("cal-ics-menu"); if (m) m.classList.remove("open"); });
+// scope: "mine"=視聴中・視聴予定のみ / "all"=放送中の全作品（カレンダーに出る作品と同じ母集団）
+function exportIcs(scope) {
+  document.getElementById("cal-ics-menu").classList.remove("open");
+  const shows = currentlyAiring().filter(a => scope === "all" || ["watching", "planning"].includes((watch[a.id] || {}).s));
+  const r = buildIcs(shows, Math.floor(Date.now() / 1000));
+  const skippedNote = r.skipped ? `（放送日時や話数が未定の ${r.skipped} 作品は除外）` : "";
+  if (!r.events) {
+    toast(scope === "mine" ? `書き出す放送予定がありません。放送中の作品を「視聴中」か「視聴予定」にしてください${skippedNote}` : `書き出す放送予定がありません${skippedNote}`);
+    return;
+  }
+  const url = URL.createObjectURL(new Blob([r.text], { type: "text/calendar;charset=utf-8" }));
+  const link = document.createElement("a");
+  link.href = url; link.download = "anime-schedule.ics";
+  document.body.appendChild(link); link.click(); link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  toast(`${r.shows} 作品・${r.events} 回分を書き出しました${skippedNote}`);
 }
 
 // ---- コレクション時パネル: 視聴済の傾向（割合バー / 円グラフ切替）----
