@@ -2547,7 +2547,8 @@ function ctxInner(a) {
     ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">🔍 ${SV_NAMES[c] || c}で検索</div>`).join("")}
     <div class="ctx-item ${songOpenId === id ? "on" : ""}" onclick="event.stopPropagation();toggleSongs(${id})">🎵 OP/ED曲を動画サイトで探す ${songOpenId === id ? "▾" : "▸"}</div>
     ${songOpenId === id ? songsPanelHtml(a) : ""}
-    <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>`;
+    <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>
+    <div class="ctx-item" onclick="openNyaa(${id})">🧲 Nyaa Torrentで検索</div>`;
 }
 function positionCtx() {
   const m = document.getElementById("ctxmenu");
@@ -3014,6 +3015,17 @@ function openWiki(id) {
 function openAniList(id) {
   hideCtxMenu();
   window.open(`https://anilist.co/anime/${id}`, "_blank", "noopener");
+}
+// Nyaa のファイル名はローマ字表記が主流なので romaji(tr) で検索する。
+// 「2nd Season」等はリリース名の表記揺れ(S2 等)で取りこぼすため外し、シード数順に並べる。
+function nyaaSearchUrl(a) {
+  const q = primeBaseTitle(a.tr || a.t || "");
+  return "https://nyaa.si/?f=0&c=1_0&s=seeders&o=desc&q=" + encodeURIComponent(q);
+}
+function openNyaa(id) {
+  hideCtxMenu();
+  const a = catalog.find(x => x.id === id);
+  if (a) window.open(nyaaSearchUrl(a), "_blank", "noopener");
 }
 function openOfficial(id) {
   hideCtxMenu();
