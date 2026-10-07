@@ -13,8 +13,11 @@ echo ============================================================>> auto_update.
 echo [%date% %time%] update start>> auto_update.log
 
 %PY% scrape_anime.py --update >> auto_update.log 2>&1
+REM OP/ED song titles from MAL API (skipped when no MAL client id)
+%PY% scrape_songs.py >> auto_update.log 2>&1
 
 git add anime-data.js >> auto_update.log 2>&1
+git add songs-data.js >> auto_update.log 2>&1
 git commit -m "chore: monthly auto-update" >> auto_update.log 2>&1
 git push origin main >> auto_update.log 2>&1
 

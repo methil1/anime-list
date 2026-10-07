@@ -20,3 +20,5 @@ android/gradlew.bat
 android/build.gradle
 android/settings.gradle
 android/store_icon.png
+.mal_client_id
+songs_backfill.log

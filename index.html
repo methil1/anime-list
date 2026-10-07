@@ -420,6 +420,14 @@
   .ctx-menu .ctx-ep { display: flex; align-items: center; gap: 6px; padding: 3px 10px 8px; font-size: 0.78rem; color: var(--text-dim); }
   .ctx-menu .ctx-ep input { width: 60px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 6px; font-family: inherit; font-size: 0.82rem; }
   .ctx-menu .ctx-divider { height: 1px; background: var(--border); margin: 5px 4px; }
+  .ctx-menu .ctx-songs { max-height: 240px; overflow-y: auto; margin: 0 4px 4px; padding: 2px 0; border-left: 2px solid var(--border); scrollbar-width: thin; }
+  .ctx-menu .ctx-song { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 8px; font-size: 0.78rem; }
+  .ctx-menu .ctx-song-k { flex: none; min-width: 30px; font-size: 0.68rem; color: var(--text-faint); }
+  .ctx-menu .ctx-song-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-dim); }
+  .ctx-menu .ctx-song-links { flex: none; display: flex; gap: 3px; }
+  .ctx-menu .ctx-song-links span { padding: 2px 6px; border-radius: 5px; border: 1px solid var(--border); font-size: 0.7rem; color: var(--text-dim); cursor: pointer; user-select: none; }
+  .ctx-menu .ctx-song-links span:hover { border-color: var(--accent); color: var(--accent-soft); }
+  .ctx-menu .ctx-song-msg { padding: 5px 8px; font-size: 0.74rem; color: var(--text-faint); }
   /* 話数記録モーダル（エピソード単位） */
   .ep-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.6); display: none; }
   .ep-overlay.show { display: block; }
@@ -2423,6 +2431,8 @@ function cycle(id) {
 /* ---------- 右クリックメニュー ---------- */
 let ctxOpenedAt = 0;
 let ctxPos = { x: 0, y: 0 };
+let ctxId = null;        // 右クリックメニューが今表示している作品ID
+let songOpenId = null;   // OP/ED曲リストを展開中の作品ID
 const STAT_ICON = { unwatched: "·", planning: "🔖", watching: "▶", done: "✓", dropped: "×", maybe: "?" };
 function ctxInner(a) {
   const id = a.id;
@@ -2459,6 +2469,8 @@ function ctxInner(a) {
       ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>`
       : `<div class="ctx-item" onclick="openPrimeSearch(${id})">🔍 プライム・ビデオで検索</div>`}
     ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">🔍 ${SV_NAMES[c] || c}で検索</div>`).join("")}
+    <div class="ctx-item ${songOpenId === id ? "on" : ""}" onclick="event.stopPropagation();toggleSongs(${id})">🎵 OP/ED曲を動画サイトで探す ${songOpenId === id ? "▾" : "▸"}</div>
+    ${songOpenId === id ? songsPanelHtml(a) : ""}
     <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>`;
 }
 function positionCtx() {
@@ -2474,6 +2486,8 @@ function showCtxMenu(e, id) {
   hideInfo();
   ctxOpenedAt = Date.now();
   ctxPos = { x: e.clientX, y: e.clientY };
+  ctxId = id;
+  songOpenId = null;
   const m = document.getElementById("ctxmenu");
   m.innerHTML = ctxInner(a);
   m.classList.add("show");
@@ -2954,6 +2968,138 @@ function openPrimeSearch(id) {
   hideCtxMenu();
   const a = catalog.find(x => x.id === id);
   if (a) window.open(primeSearchUrl(a.t), "_blank", "noopener");
+}
+
+/* ---------- OP/ED曲を動画サイトで検索 ---------- */
+// 曲名はまず songs-data.js（事前取得）から引き、無い作品だけ MAL(Jikan) の theme をその場で取る。
+// AniList ID → idMal は AniList GraphQL で引く（どちらも CORS 可）。結果は作品IDごとにメモリキャッシュ。
+const SONG_SITES = {
+  yt: { label: "YouTube", url: q => `https://www.youtube.com/results?search_query=${encodeURIComponent(q)}` },
+  nico: { label: "ニコニコ", url: q => `https://www.nicovideo.jp/search/${encodeURIComponent(q)}` }
+};
+const songCache = new Map();   // id -> { st: "loading"|"ok"|"none"|"err", op: [], ed: [] }
+const JA_CHAR_RE = /[぀-ヿ㐀-鿿]/;
+// 「KAIKAIKITAN (廻廻奇譚)」→「廻廻奇譚」。括弧内が日本語ならそちらを優先する。
+function preferJa(s) {
+  const m = s.match(/^(.*?)\s*\(([^()]+)\)\s*$/);
+  return m && JA_CHAR_RE.test(m[2]) ? m[2].trim() : s.trim();
+}
+// Jikan の theme 文字列: `1: "Title (邦題)" by Artist (eps 1-13)` を分解する。
+function parseThemeLine(line) {
+  const s = String(line).replace(/^\s*(?:#?\d+:)\s*/, "").trim();
+  const m = s.match(/^"(.+?)"\s*by\s+(.+?)\s*(?:\((eps?\s[^)]*)\))?\s*$/i);
+  if (!m) return { title: s.replace(/^"|"$/g, ""), artist: "", eps: "" };
+  return { title: preferJa(m[1]), artist: preferJa(m[2]), eps: m[3] || "" };
+}
+async function fetchJson(url, opts, retries = 1) {
+  const r = await fetch(url, opts);
+  if ((r.status === 429 || r.status >= 500) && retries > 0) {
+    await new Promise(res => setTimeout(res, 1200));
+    return fetchJson(url, opts, retries - 1);
+  }
+  if (r.status === 404) return null;   // 未登録は「曲なし」として扱う
+  if (!r.ok) throw new Error(`HTTP ${r.status}`);
+  return r.json();
+}
+async function fetchMalId(id) {
+  const j = await fetchJson("https://graphql.anilist.co", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({ query: "query($id:Int){Media(id:$id){idMal}}", variables: { id } })
+  });
+  return j && j.data && j.data.Media ? j.data.Media.idMal : null;
+}
+// /full はJikan側キャッシュに乗りやすく、/themes が 504 でも返ることが多いので先に試す。
+async function fetchThemes(malId) {
+  try {
+    const j = await fetchJson(`https://api.jikan.moe/v4/anime/${malId}/full`);
+    if (j === null) return { openings: [], endings: [] };
+    if (j.data && j.data.theme) return j.data.theme;
+  } catch (_) { /* /themes で再挑戦 */ }
+  const j = await fetchJson(`https://api.jikan.moe/v4/anime/${malId}/themes`);
+  return (j && j.data) || { openings: [], endings: [] };
+}
+// songs-data.js（scrape_songs.py が MAL 公式APIから事前取得）を初回だけ読み込む。
+// 本体データとは別ファイルにして、曲リストを開いた時だけ読む。読めなければ null。
+let songsDataPromise = null;
+function loadSongsData() {
+  if (!songsDataPromise) {
+    songsDataPromise = new Promise(resolve => {
+      const s = document.createElement("script");
+      s.src = "songs-data.js";
+      s.onload = () => resolve(window.ANIME_SONGS || null);
+      s.onerror = () => { console.warn("songs-data.js を読み込めませんでした"); resolve(null); };
+      document.head.appendChild(s);
+    });
+  }
+  return songsDataPromise;
+}
+const toSong = ([title, artist, eps]) => ({ title, artist: artist || "", eps: eps || "" });
+async function loadSongs(id) {
+  songCache.set(id, { st: "loading", op: [], ed: [] });
+  let entry;
+  try {
+    const data = await loadSongsData();
+    const pre = data && data[id];
+    if (pre) {
+      const op = (pre.op || []).map(toSong), ed = (pre.ed || []).map(toSong);
+      songCache.set(id, { st: op.length || ed.length ? "ok" : "none", op, ed });
+      if (ctxId === id && songOpenId === id) rebuildCtx(id);
+      return;
+    }
+    // 事前取得に無い作品（追加直後など）だけ Jikan にその場で問い合わせる。
+    const mal = await fetchMalId(id);
+    const th = mal ? await fetchThemes(mal) : { openings: [], endings: [] };
+    const op = (th.openings || []).map(parseThemeLine);
+    const ed = (th.endings || []).map(parseThemeLine);
+    entry = { st: op.length || ed.length ? "ok" : "none", op, ed };
+  } catch (err) {
+    console.warn("OP/ED曲の取得に失敗:", err);
+    entry = { st: "err", op: [], ed: [] };
+  }
+  songCache.set(id, entry);
+  if (ctxId === id && songOpenId === id) rebuildCtx(id);
+}
+function toggleSongs(id) {
+  songOpenId = songOpenId === id ? null : id;
+  const c = songCache.get(id);
+  if (songOpenId === id && (!c || c.st === "err")) loadSongs(id);
+  rebuildCtx(id);
+}
+function songLinksHtml(id, kind, idx) {
+  return `<span class="ctx-song-links">${Object.entries(SONG_SITES).map(([k, s]) =>
+    `<span onclick="openSong(${id},'${kind}',${idx},'${k}')">${s.label}</span>`).join("")}</span>`;
+}
+function songsPanelHtml(a) {
+  const c = songCache.get(a.id) || { st: "loading", op: [], ed: [] };
+  // 曲データが無くても「作品名 OP / ED」で探せるようにする（idx=-1）。
+  const fallback = ["op", "ed"].map(k =>
+    `<div class="ctx-song"><span class="ctx-song-k">${k.toUpperCase()}</span><span class="ctx-song-t">${esc(primeBaseTitle(a.t))} ${k.toUpperCase()}</span>${songLinksHtml(a.id, k, -1)}</div>`
+  ).join("");
+  let body;
+  if (c.st === "loading") body = `<div class="ctx-song-msg">曲名を取得中…</div>`;
+  else if (c.st === "ok") {
+    body = ["op", "ed"].flatMap(k => c[k].map((s, i) => {
+      const label = s.artist ? `${s.title} / ${s.artist}` : s.title;
+      const tip = s.eps ? `${label}（${s.eps}）` : label;
+      return `<div class="ctx-song"><span class="ctx-song-k">${k.toUpperCase()}${c[k].length > 1 ? i + 1 : ""}</span><span class="ctx-song-t" title="${esc(tip)}">${esc(label)}</span>${songLinksHtml(a.id, k, i)}</div>`;
+    })).join("");
+  } else {
+    const msg = c.st === "err" ? "曲名を取得できませんでした（作品名で検索できます）" : "曲名が登録されていません（作品名で検索できます）";
+    body = `<div class="ctx-song-msg">${msg}</div>` + fallback;
+  }
+  return `<div class="ctx-songs" onclick="event.stopPropagation()">${body}</div>`;
+}
+function openSong(id, kind, idx, site) {
+  const a = catalog.find(x => x.id === id);
+  const s = SONG_SITES[site];
+  if (!a || !s) return;
+  const c = songCache.get(id);
+  const song = idx >= 0 && c && c[kind] ? c[kind][idx] : null;
+  const q = song ? [song.title, song.artist].filter(Boolean).join(" ")
+                 : `${primeBaseTitle(a.t)} ${kind.toUpperCase()}`;
+  hideCtxMenu();
+  window.open(s.url(q), "_blank", "noopener");
 }
 function updatePoster(id) {
   const a = catalog.find(x => x.id === id);
