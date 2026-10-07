@@ -51,7 +51,7 @@ Android アプリ化の王道は **①PWA として整える → ②Android ラ�
 2. [ ] **R-18作品一覧** — 別HTMLで分離管理（AniList `isAdult` フラグから取得）
 3. [x] **裏コマンド／開発者モード** — 検索欄に合言葉 `357357357` を入力するとON/OFFトグル
        （localStorage `animeTV.dev.v1` に永続化、ONの間はタイトル横に 🛠 DEV バッジ）。
-       隠しUIは `isDevMode()` / `body.dev-mode` でゲートする。現時点で隠している機能はなし
+       隠しUIは `isDevMode()` / `body.dev-mode` でゲートする。右クリックの「AniListで開く」「Nyaa検索」を隠している
        （R-18一覧などの今後のゲートに使う）。✅ 2026-07-10 実装
 4. [x] **右クリックメニューに「Nyaa Torrentで検索」** を追加（Wikipedia/AniList/公式と並ぶ） ✅ 2026-10-07 実装（ローマ字題・続編表記除去・シード数順）
 5. [ ] **記録のクラウド同期** — 視聴記録が localStorage のみで端末間共有不可・消失リスク。

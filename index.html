@@ -1379,7 +1379,7 @@ function searchKey(a) {
 /* ---------- 開発者モード（裏コマンド） ----------
    検索欄に合言葉（DEV_COMMAND）を入力するとON/OFFがトグルされる（検索は実行されない）。
    状態は isDevMode() と body.dev-mode クラスで参照でき、隠し機能（今後のR-18一覧など）の
-   表示ゲートとして使う。現時点で隠しているUIはない（仕組みのみ）。 */
+   表示ゲートとして使う。現在は右クリックメニューの「AniListで開く」「Nyaa Torrentで検索」を隠している。 */
 const DEV_COMMAND = "357357357";
 function isDevMode() { return devMode; }
 function applyDevMode() { document.body.classList.toggle("dev-mode", devMode); }
@@ -2547,8 +2547,9 @@ function ctxInner(a) {
     ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">🔍 ${SV_NAMES[c] || c}で検索</div>`).join("")}
     <div class="ctx-item ${songOpenId === id ? "on" : ""}" onclick="event.stopPropagation();toggleSongs(${id})">🎵 OP/ED曲を動画サイトで探す ${songOpenId === id ? "▾" : "▸"}</div>
     ${songOpenId === id ? songsPanelHtml(a) : ""}
+    ${isDevMode() ? `
     <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>
-    <div class="ctx-item" onclick="openNyaa(${id})">🧲 Nyaa Torrentで検索</div>`;
+    <div class="ctx-item" onclick="openNyaa(${id})">🧲 Nyaa Torrentで検索</div>` : ""}`;
 }
 function positionCtx() {
   const m = document.getElementById("ctxmenu");
