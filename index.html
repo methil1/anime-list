@@ -14,31 +14,100 @@
 <meta name="apple-mobile-web-app-title" content="アニメモ">
 <style>
   :root {
-    --bg: #0d0e12;
-    --bg-elev: #15171e;
-    --bg-card: #1a1d26;
-    --border: #272b36;
-    --border-strong: #3a3f4d;
-    --text: #e8eaef;
-    --text-dim: #9aa0ad;
-    --text-faint: #5f6675;
-    --accent: #7c5cff;
-    --accent-soft: #a48bff;
-    --accent-glow: rgba(124, 92, 255, 0.4);
-    --done: #34d399;
-    --watching: #fbbf24;
-    --maybe: #38bdf8;
-    --dropped: #f87171;
-    --planning: #f472b6;
+    /* 面と文字（暗い面は無彩色にせず、わずかに青紫へ寄せる） */
+    --bg: oklch(16.5% 0.009 274);
+    --bg-elev: oklch(20.6% 0.014 273);
+    --bg-card: oklch(23.2% 0.018 271);
+    --border: oklch(29% 0.021 269);
+    --border-strong: oklch(36.9% 0.025 270);
+    --text: oklch(93.7% 0.007 269);
+    --text-dim: oklch(70.5% 0.02 266);
+    --text-faint: oklch(51% 0.025 266);
+    --on-accent: oklch(98.5% 0.006 290);   /* 色付きの面に載せる文字 */
+    /* アクセント */
+    --accent: oklch(59.9% 0.23 286);
+    --accent-soft: oklch(70.9% 0.166 292);
+    --accent-tint: color-mix(in oklch, var(--accent) 12%, transparent);   /* 見出しバナーの面 */
+    --accent-line: color-mix(in oklch, var(--accent) 34%, transparent);   /* 見出しバナーの縁 */
+    /* 視聴状態（明るさをそろえ、彩度を少し落とした独自値） */
+    --done: oklch(78% 0.13 165);
+    --watching: oklch(84% 0.14 82);
+    --maybe: oklch(77% 0.115 232);
+    --dropped: oklch(71% 0.15 24);
+    --planning: oklch(75% 0.14 352);
+    --on-done: oklch(25% 0.045 166);
+    --on-watching: oklch(30% 0.057 88);
+    --on-maybe: oklch(26% 0.053 243);
+    --on-dropped: oklch(20% 0.054 23);
+    --on-planning: oklch(24% 0.08 350);
+    /* クール見出し */
+    --season-winter: oklch(84% 0.085 230);
+    --season-spring: oklch(84% 0.09 348);
+    --season-summer: oklch(88% 0.12 92);
+    --season-fall: oklch(84% 0.1 64);
+    --season-ova: oklch(86% 0.1 182);
+    --season-movie: oklch(82% 0.09 294);
+    /* 評価の星 */
+    --star: oklch(88% 0.14 92);
+    --star-hover: oklch(93% 0.1 96);
+    /* 形式バッジ */
+    --fmt-short-bg: oklch(50% 0.085 223);
+    --fmt-short-ink: oklch(95% 0.035 203);
+    --fmt-ova-bg: oklch(50% 0.08 186);
+    --fmt-ova-ink: oklch(95% 0.04 181);
+    --fmt-movie-bg: oklch(52% 0.2 293);
+    /* 視聴比較（自分=青 / 相手=橙） */
+    --cmp-mine: oklch(73% 0.13 252);
+    --cmp-mine-label: oklch(81% 0.09 250);
+    --cmp-mine-text: oklch(91% 0.04 250);
+    --cmp-theirs: oklch(78% 0.14 61);
+    --cmp-theirs-label: oklch(84% 0.1 65);
+    --cmp-theirs-text: oklch(92% 0.05 70);
+    /* 円グラフの追加色 */
+    --chart-green: oklch(80% 0.16 152);
+    --chart-slate: oklch(71% 0.035 257);
+    /* 重ね・影 */
+    --scrim: oklch(14% 0.007 270 / 0.8);
+    --scrim-strong: oklch(14% 0.007 270 / 0.94);
+    --overlay: oklch(0% 0 0 / 0.6);
+    --shadow-sm: 0 2px 8px oklch(0% 0 0 / 0.5);
+    --shadow-md: 0 10px 26px -10px oklch(0% 0 0 / 0.7);
+    --shadow-lg: 0 16px 40px -12px oklch(0% 0 0 / 0.82);
+    --shadow-xl: 0 24px 60px -16px oklch(0% 0 0 / 0.85);
+    /* 動き */
+    --dur-fast: 120ms;
+    --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+    /* 重なり順（下から） */
+    --z-fab: 55;            /* 先頭へ戻るボタン */
+    --z-page: 58;           /* 放送カレンダー（別ページ扱いのオーバーレイ） */
+    --z-toast: 60;
+    --z-popover: 65;        /* 作品情報カード */
+    --z-menu: 70;           /* 右クリック・書き出しメニュー */
+    --z-modal: 80;          /* 話数記録（背景 80 / 本体 81） */
+    --z-modal-top: 90;      /* 感想（話数記録の上に重なる。背景 90 / 本体 91） */
     --radius: 12px;
     --radius-sm: 8px;
     --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
+  /* アイコン（Lucide の線画を <symbol> で1か所に置き、<use> で呼ぶ） */
+  .ico { width: 1.05em; height: 1.05em; vertical-align: -0.17em; flex: 0 0 auto; fill: none; stroke: currentColor;
+    stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+  .notice .big .ico { width: 2.6rem; height: 2.6rem; stroke-width: 1.5; }
+  /* キーボード操作時のフォーカス枠（マウスクリックでは出ない）。出現は即時でアニメーションさせない */
+  :focus-visible { outline: 2px solid var(--accent-soft); outline-offset: 2px; }
+  .poster:focus-visible, .best9-slot:focus-visible { outline-offset: 3px; }
+  .ctx-menu [tabindex]:focus-visible { outline-offset: -2px; }
+  /* OS の「視差効果を減らす」設定では、移動・拡大のアニメーションとなめらかスクロールを止める */
+  @media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important;
+      animation-iteration-count: 1 !important; scroll-behavior: auto !important; }
+    .poster:hover { transform: none; }
+  }
   body {
     font-family: var(--font);
     background:
-      radial-gradient(1200px 600px at 85% -10%, rgba(124, 92, 255, 0.12), transparent 60%),
+      radial-gradient(1200px 600px at 85% -10%, var(--accent-tint), transparent 60%),
       var(--bg);
     color: var(--text);
     min-height: 100vh;
@@ -65,7 +134,7 @@
   .rail-views { display: flex; flex-direction: column; gap: 6px; }
   .rail-views .ytab { width: 100%; text-align: left; }
   .rail-group { display: flex; flex-direction: column; gap: 9px; }
-  .rail-label { color: var(--text-faint); font-size: 0.72rem; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
+  .rail-label { color: var(--text-faint); font-size: 0.72rem; font-weight: 700; }
   /* レール内の年ナビ: 年代折りたたみ */
   .rail .yearbar { display: flex; flex-direction: column; gap: 4px; overflow: visible; margin-top: 0; padding-bottom: 0; }
   .rail-dec-head {
@@ -102,7 +171,6 @@
   .title-row { display: flex; align-items: stretch; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
   .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; display: flex; flex-direction: column; }
   h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
-  h1 .accent { background: linear-gradient(120deg, var(--accent-soft), var(--accent)); -webkit-background-clip: text; background-clip: text; color: transparent; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
   .dev-note { color: var(--accent); font-size: 0.82rem; margin-top: 5px; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
@@ -110,7 +178,7 @@
   .stats { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; }
   .stat .num { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
-  .stat .lbl { color: var(--text-faint); font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .stat .lbl { color: var(--text-faint); font-size: 0.74rem; }
   .header-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 14px; }
   .stat.done .num { color: var(--done); }
   .stat.watching .num { color: var(--watching); }
@@ -130,9 +198,9 @@
     font-size: 0.82rem; font-weight: 700; color: var(--text-dim); margin-bottom: 9px; }
   .cp-tabs { display: flex; gap: 5px; }
   .cp-tab { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-faint);
-    padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; cursor: pointer; font-family: inherit; transition: all .12s; }
+    padding: 3px 10px; border-radius: 999px; font-size: 0.74rem; cursor: pointer; font-family: inherit; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
   .cp-tab:hover { color: var(--text); border-color: var(--border-strong); }
-  .cp-tab.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .cp-tab.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   /* 週間放送表 */
   .sched { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; max-height: 420px; overflow-y: auto; }
   .sched::-webkit-scrollbar { width: 6px; }
@@ -158,22 +226,22 @@
   @media (max-width: 820px) { .context-panel { display: none; } }
 
   /* 放送カレンダー（別ページオーバーレイ） */
-  .cal-overlay { position: fixed; inset: 0; z-index: 58; background: rgba(8, 9, 12, .93);
+  .cal-overlay { position: fixed; inset: 0; z-index: var(--z-page); background: var(--scrim-strong);
     backdrop-filter: blur(3px); display: none; flex-direction: column; padding: 22px clamp(14px, 4vw, 48px) 30px; overflow-y: auto; }
   .cal-overlay.open { display: flex; }
   .cal-head { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
   .cal-head h2 { font-size: 1.15rem; font-weight: 800; letter-spacing: .02em; }
   .cal-month { font-size: 1.05rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; min-width: 128px; text-align: center; }
   .cal-nav { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
-    width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.15rem; line-height: 1; font-family: inherit; transition: all .12s; }
+    width: 34px; height: 34px; border-radius: 8px; cursor: pointer; font-size: 1.15rem; line-height: 1; font-family: inherit; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
   .cal-nav:hover { color: var(--text); border-color: var(--border-strong); }
   .cal-spacer { flex: 1 1 auto; }
   .cal-btn { background: var(--bg-elev); border: 1px solid var(--border-strong); color: var(--text-dim);
-    padding: 7px 15px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: all .12s; }
+    padding: 7px 15px; border-radius: 999px; cursor: pointer; font-family: inherit; font-size: 0.85rem; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); }
   .cal-btn:hover { color: var(--text); border-color: var(--text-faint); }
   .cal-ics { position: relative; }
   .cal-ics-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; flex-direction: column; gap: 6px;
-    padding: 8px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: 0 8px 24px rgba(0,0,0,.45); white-space: nowrap; }
+    padding: 8px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow-md); white-space: nowrap; }
   .cal-ics-menu.open { display: flex; }
   .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
   .cal-dow { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--text-faint); padding-bottom: 2px; }
@@ -206,22 +274,22 @@
     padding: 11px 14px 11px 40px; border-radius: var(--radius-sm); font-size: 0.95rem; font-family: inherit;
     transition: border-color .15s, box-shadow .15s;
   }
-  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+  .search input:focus { outline: none; border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
   .search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 16px; height: 16px; color: var(--text-faint); }
 
   .chips { display: flex; gap: 7px; flex-wrap: wrap; }
   .chip {
     background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
     padding: 9px 13px; border-radius: 999px; font-size: 0.83rem; cursor: pointer; font-family: inherit;
-    transition: all .15s; white-space: nowrap;
+    transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); white-space: nowrap;
   }
   .chip:hover { border-color: var(--border-strong); color: var(--text); }
-  .chip.active { background: var(--accent); border-color: var(--accent); color: #fff; box-shadow: 0 4px 14px -4px var(--accent-glow); }
-  .chip.done.active { background: var(--done); border-color: var(--done); color: #06281c; box-shadow: 0 4px 14px -4px rgba(52,211,153,.4); }
-  .chip.watching.active { background: var(--watching); border-color: var(--watching); color: #3a2c05; box-shadow: 0 4px 14px -4px rgba(251,191,36,.4); }
-  .chip.maybe.active { background: var(--maybe); border-color: var(--maybe); color: #07263b; box-shadow: 0 4px 14px -4px rgba(56,189,248,.4); }
-  .chip.dropped.active { background: var(--dropped); border-color: var(--dropped); color: #2a0a0a; box-shadow: 0 4px 14px -4px rgba(248,113,113,.4); }
-  .chip.planning.active { background: var(--planning); border-color: var(--planning); color: #3a0a25; box-shadow: 0 4px 14px -4px rgba(244,114,182,.4); }
+  .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
+  .chip.done.active { background: var(--done); border-color: var(--done); color: var(--on-done); }
+  .chip.watching.active { background: var(--watching); border-color: var(--watching); color: var(--on-watching); }
+  .chip.maybe.active { background: var(--maybe); border-color: var(--maybe); color: var(--on-maybe); }
+  .chip.dropped.active { background: var(--dropped); border-color: var(--dropped); color: var(--on-dropped); }
+  .chip.planning.active { background: var(--planning); border-color: var(--planning); color: var(--on-planning); }
 
   /* Year nav */
   .yearbar {
@@ -233,12 +301,12 @@
   .ytab {
     background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
     padding: 8px 14px; border-radius: var(--radius-sm); font-size: 0.9rem; cursor: pointer; font-family: inherit;
-    white-space: nowrap; font-variant-numeric: tabular-nums; transition: all .12s; font-weight: 600;
+    white-space: nowrap; font-variant-numeric: tabular-nums; transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); font-weight: 600;
   }
   .ytab:hover { color: var(--text); border-color: var(--border-strong); }
   .ytab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
   .ytab.collection { color: var(--accent-soft); border-color: var(--border-strong); }
-  .ytab.collection.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .ytab.collection.active { background: var(--accent); color: var(--on-accent); border-color: var(--accent); }
   .yearbar-label { color: var(--text-faint); font-size: 0.78rem; margin: 40px 0 -10px; }
 
   /* 年代別折りたたみ（視聴コレクション） */
@@ -257,7 +325,7 @@
   .recent-date-block .decade-block { margin-top: 28px; }
   .recent-date-head { display: flex; align-items: baseline; gap: 12px; margin-bottom: 4px;
     font-size: 1.1rem; font-weight: 800; color: var(--accent-soft);
-    background: rgba(124,92,255,.12); padding: 9px 16px; border-radius: 12px; border-left: 4px solid var(--accent); }
+    background: var(--accent-tint); padding: 9px 16px; border-radius: 12px; border: 1px solid var(--accent-line); }
   .recent-date-head .count { color: var(--text-faint); font-size: 0.82rem; font-weight: 600; }
   .recent-date-head .line { flex: 1; }
 
@@ -286,12 +354,12 @@
   .cour-head .season { font-size: 1.15rem; font-weight: 700; }
   .cour-head .count { color: var(--text-faint); font-size: 0.82rem; }
   .cour-head .line { flex: 1; }
-  .s-winter { color: #7dd3fc; }
-  .s-spring { color: #f9a8d4; }
-  .s-summer { color: #fcd34d; }
-  .s-fall   { color: #fdba74; }
-  .s-ova    { color: #5eead4; }
-  .s-movie  { color: #c4b5fd; }
+  .s-winter { color: var(--season-winter); }
+  .s-spring { color: var(--season-spring); }
+  .s-summer { color: var(--season-summer); }
+  .s-fall   { color: var(--season-fall); }
+  .s-ova    { color: var(--season-ova); }
+  .s-movie  { color: var(--season-movie); }
   .s-recent { color: var(--accent-soft); }
 
   /* Poster grid */
@@ -302,7 +370,7 @@
     transition: transform .15s, border-color .15s, box-shadow .15s;
     user-select: none;
   }
-  .poster:hover { transform: translateY(-3px); box-shadow: 0 12px 26px -12px rgba(0,0,0,.8); }
+  .poster:hover { transform: translateY(-3px); box-shadow: var(--shadow-md); }
   .poster.done { border-color: var(--done); }
   .poster.watching { border-color: var(--watching); }
   .poster.maybe { border-color: var(--maybe); }
@@ -311,42 +379,41 @@
 
   .poster .meta {
     position: absolute; inset: auto 0 0 0; padding: 22px 9px 9px;
-    background: linear-gradient(transparent, rgba(8,9,12,.95)55%);
+    background: linear-gradient(transparent, var(--scrim-strong)55%);
   }
   .poster .ttl { font-size: 0.82rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
   .poster .sub { font-size: 0.68rem; color: var(--text-dim); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .poster .ep { font-variant-numeric: tabular-nums; }
-  .poster .multi { background: var(--accent); color: #fff; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
-  .poster .cont { background: var(--watching); color: #3a2c05; font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
+  .poster .multi { background: var(--accent); color: var(--on-accent); font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
+  .poster .cont { background: var(--watching); color: var(--on-watching); font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
   .poster .fmt { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
-  .poster .fmt.short { background: #0e7490; color: #cffafe; }
-  .poster .fmt.ova { background: #0f766e; color: #ccfbf1; }
-  .poster .fmt.movie { background: #7c3aed; color: #fff; }
+  .poster .fmt.short { background: var(--fmt-short-bg); color: var(--fmt-short-ink); }
+  .poster .fmt.ova { background: var(--fmt-ova-bg); color: var(--fmt-ova-ink); }
+  .poster .fmt.movie { background: var(--fmt-movie-bg); color: var(--on-accent); }
 
   /* status corner */
-  .poster .status { position: absolute; top: 7px; right: 7px; width: 26px; height: 26px; border-radius: 50%; display: none; place-items: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-  .poster.done .status { display: grid; background: var(--done); color: #06281c; }
-  .poster.watching .status { display: grid; background: var(--watching); color: #3a2c05; }
-  .poster.maybe .status { display: grid; background: var(--maybe); color: #07263b; }
+  .poster .status { position: absolute; top: 7px; right: 7px; width: 26px; height: 26px; border-radius: 50%; display: none; place-items: center; box-shadow: var(--shadow-sm); }
+  .poster.done .status { display: grid; background: var(--done); color: var(--on-done); }
+  .poster.watching .status { display: grid; background: var(--watching); color: var(--on-watching); }
+  .poster.maybe .status { display: grid; background: var(--maybe); color: var(--on-maybe); }
   .poster .status svg { width: 15px; height: 15px; }
   .poster .status .qmark { font-weight: 800; font-size: 15px; line-height: 1; }
   .poster.dropped { border-color: var(--dropped); }
-  .poster.dropped .status { display: grid; background: var(--dropped); color: #2a0a0a; }
+  .poster.dropped .status { display: grid; background: var(--dropped); color: var(--on-dropped); }
   .poster.planning { border-color: var(--planning); }
-  .poster.planning .status { display: grid; background: var(--planning); color: #3a0a25; }
+  .poster.planning .status { display: grid; background: var(--planning); color: var(--on-planning); }
   .poster .status .xmark { font-weight: 800; font-size: 17px; line-height: 1; }
-  .poster .prog { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: rgba(251,191,36,.22); color: var(--watching); }
-  .poster .prog.dropped { background: rgba(248,113,113,.2); color: var(--dropped); }
-  .poster .myrate { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: rgba(124,92,255,.25); color: var(--accent-soft); }
-  .poster .score { position: absolute; top: 7px; left: 7px; background: rgba(8,9,12,.78); color: #fcd34d; font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
+  .poster .prog { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: color-mix(in oklch, var(--watching) 22%, transparent); color: var(--watching); }
+  .poster .prog.dropped { background: color-mix(in oklch, var(--dropped) 20%, transparent); color: var(--dropped); }
+  .poster .myrate { font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; background: color-mix(in oklch, var(--accent) 25%, transparent); color: var(--accent-soft); }
+  .poster .score { position: absolute; top: 7px; left: 7px; background: var(--scrim); color: var(--star); font-size: 0.68rem; font-weight: 700; padding: 2px 7px; border-radius: 999px; }
   .poster .score.noscore { color: var(--text-faint); }
   /* タッチ端末用 情報ボタン（ホバーできない端末でのみ表示） */
   .poster .pinfo { display: none; position: absolute; top: 40px; right: 7px; z-index: 3;
     width: 28px; height: 28px; border-radius: 50%; border: 1px solid var(--border-strong);
-    background: rgba(8,9,12,.82); color: var(--accent-soft); font-family: Georgia, "Times New Roman", serif;
-    font-style: italic; font-weight: 700; font-size: 16px; line-height: 1; cursor: pointer;
-    align-items: center; justify-content: center; box-shadow: 0 2px 8px rgba(0,0,0,.5); }
-  .poster .pinfo:active { background: var(--accent); color: #fff; }
+    background: var(--scrim); color: var(--accent-soft); font-size: 16px; line-height: 1; cursor: pointer;
+    align-items: center; justify-content: center; box-shadow: var(--shadow-sm); }
+  .poster .pinfo:active { background: var(--accent); color: var(--on-accent); }
   .info-card.pinned { pointer-events: auto; }
   @media (hover: none) and (pointer: coarse) { .poster .pinfo { display: flex; } }
 
@@ -355,7 +422,7 @@
   .notice .big { font-size: 2.6rem; margin-bottom: 10px; }
   .notice code { background: var(--bg-elev); padding: 2px 8px; border-radius: 6px; color: var(--accent-soft); }
 
-  .reco-banner { margin: 4px 0 18px; padding: 13px 16px; background: var(--bg-elev); border-left: 3px solid var(--accent-soft); border-radius: 8px; font-size: 0.9rem; color: var(--text-dim); }
+  .reco-banner { margin: 4px 0 18px; padding: 13px 16px; background: var(--bg-elev); border: 1px solid var(--border); border-radius: 8px; font-size: 0.9rem; color: var(--text-dim); }
   .reco-banner b { color: var(--text); }
   .reco-sum { margin-top: 8px; display: flex; flex-wrap: wrap; gap: 14px; font-size: 0.84rem; }
   .reco-sum-axis .k { color: var(--text-faint); margin-right: 4px; font-size: 0.78rem; }
@@ -364,27 +431,27 @@
   .reco-sub { margin-top: 6px; font-size: 0.8rem; color: var(--text-faint); }
   .collection-sort { margin: 2px 0 18px; }
   .series-block { margin: 0 0 26px; }
-  .series-head { font-size: 1.02rem; font-weight: 700; color: var(--text); margin: 0 0 10px; padding-left: 10px; border-left: 3px solid var(--accent-soft); }
+  .series-head { font-size: 1.02rem; font-weight: 700; color: var(--text); margin: 0 0 10px; }
   .series-count { font-size: 0.8rem; font-weight: 600; color: var(--text-faint); margin-left: 8px; }
   /* 視聴比較ビュー */
   .cmp-banner-head { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
   .cmp-sum { margin-top: 8px; font-size: 0.84rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .cmp-key { font-weight: 600; padding: 1px 9px; border-radius: 999px; font-size: 0.78rem; }
-  .cmp-key.both { background: rgba(64, 209, 153, .16); color: var(--done); }
-  .cmp-key.mine { background: rgba(90, 169, 255, .16); color: #8cc4ff; }
-  .cmp-key.theirs { background: rgba(255, 159, 67, .16); color: #ffbb78; }
+  .cmp-key.both { background: color-mix(in oklch, var(--done) 16%, transparent); color: var(--done); }
+  .cmp-key.mine { background: color-mix(in oklch, var(--cmp-mine) 16%, transparent); color: var(--cmp-mine-label); }
+  .cmp-key.theirs { background: color-mix(in oklch, var(--cmp-theirs) 16%, transparent); color: var(--cmp-theirs-label); }
   .cmp-banner .cp-tabs { margin-top: 11px; flex-wrap: wrap; }
   .poster .cmp-row { margin-top: 5px; display: flex; flex-direction: column; gap: 1px; font-size: 0.66rem; line-height: 1.3; }
-  .poster .cmp-me { color: #cfe6ff; }
-  .poster .cmp-them { color: #ffe0bd; }
+  .poster .cmp-me { color: var(--cmp-mine-text); }
+  .poster .cmp-them { color: var(--cmp-theirs-text); }
   .poster .cmp-me.none, .poster .cmp-them.none { color: var(--text-faint); }
   .poster.cmp-both { border-color: var(--done); }
-  .poster.cmp-mine { border-color: #5aa9ff; }
-  .poster.cmp-theirs { border-color: #ff9f43; }
+  .poster.cmp-mine { border-color: var(--cmp-mine); }
+  .poster.cmp-theirs { border-color: var(--cmp-theirs); }
   .poster.cmp-both::after, .poster.cmp-mine::after, .poster.cmp-theirs::after { content: ""; position: absolute; top: 0; left: 0; right: 0; height: 4px; z-index: 2; }
   .poster.cmp-both::after { background: var(--done); }
-  .poster.cmp-mine::after { background: #5aa9ff; }
-  .poster.cmp-theirs::after { background: #ff9f43; }
+  .poster.cmp-mine::after { background: var(--cmp-mine); }
+  .poster.cmp-theirs::after { background: var(--cmp-theirs); }
   .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
   .ctx-menu .ctx-item.on { color: var(--accent-soft); }
 
@@ -395,32 +462,33 @@
   .src-credit a:hover { text-decoration: underline; }
 
   /* toast */
-  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: 0 12px 30px -10px rgba(0,0,0,.7); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: 60; }
+  .toast { position: fixed; bottom: 24px; left: 50%; transform: translateX(-50%) translateY(20px); background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text); padding: 11px 18px; border-radius: 999px; font-size: 0.88rem; box-shadow: var(--shadow-md); opacity: 0; pointer-events: none; transition: opacity .2s, transform .2s; z-index: var(--z-toast); }
   /* 先頭へ戻るフローティングボタン（カレンダー(z-58)より下＝オーバーレイ表示中は隠す） */
-  .to-top { position: fixed; bottom: 22px; right: 22px; z-index: 55; width: 46px; height: 46px; border-radius: 50%;
+  .to-top { position: fixed; bottom: 22px; right: 22px; z-index: var(--z-fab); width: 46px; height: 46px; border-radius: 50%;
     background: var(--bg-card); border: 1px solid var(--border-strong); color: var(--text-dim); font-size: 1.25rem; line-height: 1;
-    cursor: pointer; font-family: inherit; box-shadow: 0 10px 26px -10px rgba(0,0,0,.7);
+    cursor: pointer; font-family: inherit; box-shadow: var(--shadow-md);
     opacity: 0; pointer-events: none; transform: translateY(12px); transition: opacity .2s, transform .2s, color .12s, border-color .12s; }
   .to-top.show { opacity: 1; pointer-events: auto; transform: translateY(0); }
   .to-top:hover { color: var(--accent-soft); border-color: var(--accent); }
   @media (max-width: 700px) { .to-top { bottom: 16px; right: 16px; width: 42px; height: 42px; } }
   .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.error { border-color: var(--dropped); color: var(--text); max-width: min(560px, calc(100vw - 32px)); }
 
   /* Context menu (右クリック) */
-  .ctx-menu { position: fixed; z-index: 70; min-width: 190px; max-width: 290px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 16px 40px -12px rgba(0,0,0,.8); padding: 6px; display: none; }
+  .ctx-menu { position: fixed; z-index: var(--z-menu); min-width: 190px; max-width: 290px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 6px; display: none; }
   .ctx-menu.show { display: block; }
   .ctx-menu .ctx-title { padding: 7px 10px 6px; font-size: 0.78rem; color: var(--text-faint); border-bottom: 1px solid var(--border); margin-bottom: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .ctx-menu .ctx-item { display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 6px; font-size: 0.86rem; color: var(--text); cursor: pointer; user-select: none; }
   .ctx-menu .ctx-item:hover { background: var(--bg-elev); color: var(--accent-soft); }
   .ctx-menu .ctx-stars { display: flex; gap: 3px; padding: 7px 10px 8px; }
   .ctx-menu .ctx-star { cursor: pointer; font-size: 1.2rem; line-height: 1; color: var(--text-faint); transition: color .1s; }
-  .ctx-menu .ctx-star.on { color: #fcd34d; }
-  .ctx-menu .ctx-star:hover { color: #fde68a; }
+  .ctx-menu .ctx-star.on { color: var(--star); }
+  .ctx-menu .ctx-star:hover { color: var(--star-hover); }
   .ctx-menu .ctx-seclabel { padding: 4px 10px 3px; font-size: 0.72rem; color: var(--text-faint); }
   .ctx-menu .ctx-states { display: flex; flex-wrap: wrap; gap: 4px; padding: 2px 8px 4px; }
   .ctx-menu .ctx-state { padding: 5px 9px; border-radius: 6px; font-size: 0.8rem; cursor: pointer; border: 1px solid var(--border); color: var(--text-dim); user-select: none; white-space: nowrap; }
   .ctx-menu .ctx-state:hover { border-color: var(--border-strong); color: var(--text); }
-  .ctx-menu .ctx-state.cur { border-color: var(--accent); color: #fff; background: var(--accent); }
+  .ctx-menu .ctx-state.cur { border-color: var(--accent); color: var(--on-accent); background: var(--accent); }
   .ctx-menu .ctx-ep { display: flex; align-items: center; gap: 6px; padding: 3px 10px 8px; font-size: 0.78rem; color: var(--text-dim); }
   .ctx-menu .ctx-ep input { width: 60px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 4px 6px; font-family: inherit; font-size: 0.82rem; }
   .ctx-menu .ctx-divider { height: 1px; background: var(--border); margin: 5px 4px; }
@@ -433,12 +501,12 @@
   .ctx-menu .ctx-song-links span:hover { border-color: var(--accent); color: var(--accent-soft); }
   .ctx-menu .ctx-song-msg { padding: 5px 8px; font-size: 0.74rem; color: var(--text-faint); }
   /* 話数記録モーダル（エピソード単位） */
-  .ep-overlay { position: fixed; inset: 0; z-index: 80; background: rgba(0,0,0,.6); display: none; }
+  .ep-overlay { position: fixed; inset: 0; z-index: var(--z-modal); background: var(--overlay); display: none; }
   .ep-overlay.show { display: block; }
-  .ep-modal { position: fixed; z-index: 81; left: 50%; top: 50%; transform: translate(-50%,-50%);
+  .ep-modal { position: fixed; z-index: calc(var(--z-modal) + 1); left: 50%; top: 50%; transform: translate(-50%,-50%);
     width: min(440px, calc(100vw - 32px)); max-height: min(80vh, 640px); overflow: auto;
     background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm);
-    box-shadow: 0 24px 60px -16px rgba(0,0,0,.85); padding: 16px 18px 18px; display: none; }
+    box-shadow: var(--shadow-xl); padding: 16px 18px 18px; display: none; }
   .ep-modal.show { display: block; }
   .ep-modal .ep-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 6px; }
   .ep-modal .ep-ttl { font-size: 0.98rem; font-weight: 700; color: var(--text); line-height: 1.3; flex: 1; }
@@ -450,18 +518,18 @@
   .ep-modal .ep-chip { background: var(--bg-elev); border: 1px solid var(--border); color: var(--text-dim);
     border-radius: 7px; padding: 7px 0; font-family: inherit; font-size: 0.82rem; cursor: pointer; font-variant-numeric: tabular-nums; transition: background .1s, border-color .1s; }
   .ep-modal .ep-chip:hover { border-color: var(--border-strong); color: var(--text); }
-  .ep-modal .ep-chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .ep-modal .ep-chip.on { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .ep-modal .ep-hint { font-size: 0.72rem; color: var(--text-faint); margin: -6px 0 12px; }
   .ep-modal .ep-upto { display: flex; align-items: center; gap: 7px; font-size: 0.82rem; color: var(--text-dim); margin-bottom: 12px; }
   .ep-modal .ep-upto input { width: 64px; background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 6px; padding: 5px 7px; font-family: inherit; font-size: 0.85rem; }
   .ep-modal .ep-actions { display: flex; gap: 8px; }
-  .ep-modal .ep-btn { background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 7px; padding: 7px 14px; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
+  .ep-modal .ep-btn { background: var(--accent); border: 1px solid var(--accent); color: var(--on-accent); border-radius: 7px; padding: 7px 14px; font-family: inherit; font-size: 0.82rem; font-weight: 600; cursor: pointer; }
   .ep-modal .ep-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
   .ep-modal .ep-btn.ghost { background: transparent; color: var(--text-faint); border-color: var(--border); font-weight: 500; }
   .ep-modal .ep-btn.ghost:hover { color: var(--text); border-color: var(--border-strong); background: var(--bg-elev); }
   /* 感想（テキスト記録） */
-  #noteoverlay { z-index: 90; }
-  .ep-modal.note-modal { z-index: 91; }
+  #noteoverlay { z-index: var(--z-modal-top); }
+  .ep-modal.note-modal { z-index: calc(var(--z-modal-top) + 1); }
   .ep-modal .ep-seclabel { font-size: 0.76rem; color: var(--text-faint); font-weight: 700; letter-spacing: 0.04em; margin: 4px 0 6px; }
   .ep-modal .ep-note { width: 100%; min-height: 120px; resize: vertical; box-sizing: border-box;
     background: var(--bg-elev); border: 1px solid var(--border); color: var(--text); border-radius: 8px;
@@ -469,7 +537,7 @@
   .ep-modal .ep-note:focus { outline: none; border-color: var(--accent); }
   .ep-modal .ep-chip.noted { box-shadow: inset 0 0 0 1px var(--accent-soft); }
   .ep-modal .ep-chip .dot { color: var(--accent-soft); font-size: 0.62rem; }
-  .ep-modal .ep-chip.on .dot { color: #fff; }
+  .ep-modal .ep-chip.on .dot { color: var(--on-accent); }
   .ep-modal .epc { margin: 0 0 12px; }
   .ep-modal .epc-lbl { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 5px; }
   .ep-modal .epc-lbl b { color: var(--accent-soft); }
@@ -497,27 +565,27 @@
   .tl-what { font-size: 0.78rem; color: var(--text-dim); margin-top: 2px; }
   .tl-time { font-size: 0.78rem; color: var(--text-faint); font-variant-numeric: tabular-nums; flex: 0 0 auto; }
   .tl-del { background: none; border: none; color: var(--text-faint); font-size: 0.9rem; cursor: pointer; flex: 0 0 auto; padding: 2px 4px; line-height: 1; }
-  .tl-del:hover { color: var(--danger, #f87171); }
+  .tl-del:hover { color: var(--dropped); }
   /* マイページ「次に見る」キュー */
   .nextup { margin-bottom: 22px; }
   .nextup-head { font-size: 1.05rem; font-weight: 800; color: var(--accent-soft);
-    background: rgba(124,92,255,.12); padding: 9px 16px; border-radius: 12px; border-left: 4px solid var(--accent); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
+    background: var(--accent-tint); padding: 9px 16px; border-radius: 12px; border: 1px solid var(--accent-line); margin-bottom: 12px; display: flex; align-items: center; gap: 8px; }
   .nextup-head .count { color: var(--text-faint); font-size: 0.82rem; font-weight: 600; }
   .nextup-grid { display: flex; flex-wrap: wrap; gap: 14px; }
   .nextup-card { width: 150px; }
   .nextup-card .nextup-info { display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-top: 6px; }
   .nextup-card .nextup-next { font-size: 0.78rem; color: var(--text-dim); font-variant-numeric: tabular-nums; }
   .nextup-card .nextup-next b { color: var(--accent-soft); }
-  .nextup-card .nextup-btn { flex: 0 0 auto; background: var(--accent); border: 1px solid var(--accent); color: #fff; border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 0.74rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
+  .nextup-card .nextup-btn { flex: 0 0 auto; background: var(--accent); border: 1px solid var(--accent); color: var(--on-accent); border-radius: 6px; padding: 4px 8px; font-family: inherit; font-size: 0.74rem; font-weight: 700; cursor: pointer; white-space: nowrap; }
   .nextup-card .nextup-btn:hover { background: var(--accent-soft); border-color: var(--accent-soft); }
   .nextup-card .nextup-wait { flex: 0 0 auto; font-size: 0.72rem; color: var(--text-faint); white-space: nowrap; }
   /* 放送状態バッジ（作品単位）: airing=赤系 / upcoming=淡色 */
   .air-badge { display: inline-block; margin-left: 6px; padding: 1px 6px; border-radius: 5px; font-size: 0.68rem; font-weight: 700; white-space: nowrap; vertical-align: middle; }
-  .air-badge.airing { color: #fff; background: #f87171; }
+  .air-badge.airing { color: var(--on-accent); background: var(--dropped); }
   .air-badge.upcoming { color: var(--text-dim); background: var(--bg-elev); border: 1px solid var(--border-strong); }
   .poster .prog.upcoming { color: var(--text-faint); }
   /* ホバー情報カード（作品名/原作/制作/メインキャラ） */
-  .info-card { position: fixed; z-index: 65; min-width: 200px; max-width: 300px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: 0 16px 40px -12px rgba(0,0,0,.85); padding: 11px 13px; display: none; pointer-events: none; }
+  .info-card { position: fixed; z-index: var(--z-popover); min-width: 200px; max-width: 300px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 11px 13px; display: none; pointer-events: none; }
   .info-card.show { display: block; }
   .info-card .ic-title { font-size: 0.9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: 7px; }
   .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
@@ -542,14 +610,14 @@
     cursor: pointer; background: var(--bg-elev); border: 1px solid var(--border); }
   .best9-slot img { width: 100%; height: 100%; object-fit: cover; display: block; }
   .best9-slot .b9-ttl { position: absolute; left: 0; right: 0; bottom: 0; padding: 22px 8px 6px;
-    font-size: 12px; font-weight: 700; background: linear-gradient(transparent, rgba(8, 9, 12, .92));
+    font-size: 12px; font-weight: 700; background: linear-gradient(transparent, var(--scrim-strong));
     white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .best9-slot.empty { display: flex; align-items: center; justify-content: center;
     border: 2px dashed var(--border); color: var(--text-dim); font-size: 26px; cursor: default; }
   .best9-slot.swap-src { outline: 3px solid var(--accent); outline-offset: -3px; }
   .b9-actions { margin-bottom: 20px; }
   .poster.b9-on { outline: 3px solid var(--accent); outline-offset: -3px; }
-  .b9-mark { position: absolute; top: 6px; left: 6px; z-index: 2; background: var(--accent); color: #fff;
+  .b9-mark { position: absolute; top: 6px; left: 6px; z-index: 2; background: var(--accent); color: var(--on-accent);
     font-weight: 800; font-size: 13px; width: 22px; height: 22px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; }
   /* ---------- 開発者モード（裏コマンド） ---------- */
@@ -559,17 +627,45 @@
 </style>
 </head>
 <body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-user" viewBox="0 0 24 24"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></symbol>
+  <symbol id="i-compass" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polygon points="16.24 7.76 14.12 14.12 7.76 16.24 9.88 9.88 16.24 7.76"/></symbol>
+  <symbol id="i-clock" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></symbol>
+  <symbol id="i-list-plus" viewBox="0 0 24 24"><path d="M11 12H3"/><path d="M16 6H3"/><path d="M16 18H3"/><path d="M18 9v6"/><path d="M21 12h-6"/></symbol>
+  <symbol id="i-tv" viewBox="0 0 24 24"><rect width="20" height="15" x="2" y="7" rx="2" ry="2"/><polyline points="17 2 12 7 7 2"/></symbol>
+  <symbol id="i-calendar" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h18"/></symbol>
+  <symbol id="i-award" viewBox="0 0 24 24"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></symbol>
+  <symbol id="i-users" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><polygon points="6 3 20 12 6 21 6 3"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-ban" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-pencil" viewBox="0 0 24 24"><path d="M17 3a2.85 2.83 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"/></symbol>
+  <symbol id="i-book-open" viewBox="0 0 24 24"><path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"/><path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"/></symbol>
+  <symbol id="i-external-link" viewBox="0 0 24 24"><path d="M15 3h6v6"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></symbol>
+  <symbol id="i-music" viewBox="0 0 24 24"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 2a14.5 14.5 0 0 0 0 20 14.5 14.5 0 0 0 0-20"/><path d="M2 12h20"/></symbol>
+  <symbol id="i-magnet" viewBox="0 0 24 24"><path d="m6 15-4-4 6.75-6.77a7.79 7.79 0 0 1 11 11L13 22l-4-4 6.39-6.36a2.14 2.14 0 0 0-3-3L6 15"/><path d="m5 8 4 4"/><path d="m12 15 4 4"/></symbol>
+  <symbol id="i-file-text" viewBox="0 0 24 24"><path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/><path d="M16 13H8"/><path d="M16 17H8"/><path d="M10 9H8"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M3 9h18"/><path d="M3 15h18"/><path d="M12 3v18"/></symbol>
+  <symbol id="i-image" viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></symbol>
+  <symbol id="i-bookmark" viewBox="0 0 24 24"><path d="m19 21-7-4-7 4V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2v16z"/></symbol>
+  <symbol id="i-download" viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/></symbol>
+  <symbol id="i-pie-chart" viewBox="0 0 24 24"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></symbol>
+  <symbol id="i-info" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></symbol>
+  <symbol id="i-list-checks" viewBox="0 0 24 24"><path d="m3 17 2 2 4-4"/><path d="m3 7 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></symbol>
+</svg>
 <div class="shell">
   <aside class="rail" id="rail">
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索..." oninput="onSearch()">
+      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索…" oninput="onSearch()">
     </div>
 
     <nav class="rail-views">
-      <button class="ytab collection" id="collection-btn" onclick="goCollection()">★ マイページ</button>
-      <button class="ytab collection" id="reco-btn" onclick="goReco()">✨ おすすめ</button>
-      <button class="ytab collection" id="timeline-btn" onclick="goTimeline()">🕒 タイムライン</button>
+      <button class="ytab collection" id="collection-btn" onclick="goCollection()"><svg class="ico" aria-hidden="true"><use href="#i-user"/></svg> マイページ</button>
+      <button class="ytab collection" id="reco-btn" onclick="goReco()"><svg class="ico" aria-hidden="true"><use href="#i-compass"/></svg> おすすめ</button>
+      <button class="ytab collection" id="timeline-btn" onclick="goTimeline()"><svg class="ico" aria-hidden="true"><use href="#i-clock"/></svg> タイムライン</button>
     </nav>
 
     <div class="rail-group">
@@ -606,16 +702,16 @@
     <header>
       <div class="title-row">
         <div class="title-block">
-          <h1>アニメモ！<span class="dev-badge">🛠 DEV</span></h1>
+          <h1>アニメモ！<span class="dev-badge">DEV</span></h1>
           <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
           <p class="dev-note">※おすすめ機能は現在開発中です。</p>
           <p class="src-note" id="src-note"></p>
           <div class="stats" id="stats"></div>
           <div class="header-actions">
-            <button class="ytab collection" id="recent-btn" onclick="goRecent()">🆕 新着更新分</button>
-            <button class="ytab collection" id="series-btn" onclick="goSeries()">📺 見たいシリーズ</button>
-            <button class="ytab" id="calendar-btn" onclick="openCalendar()">📅 放送カレンダー</button>
-            <button class="ytab collection" id="best9-btn" onclick="goBest9()">🏆 アニメ9選</button>
+            <button class="ytab collection" id="recent-btn" onclick="goRecent()"><svg class="ico" aria-hidden="true"><use href="#i-list-plus"/></svg> 新着更新分</button>
+            <button class="ytab collection" id="series-btn" onclick="goSeries()"><svg class="ico" aria-hidden="true"><use href="#i-tv"/></svg> 見たいシリーズ</button>
+            <button class="ytab" id="calendar-btn" onclick="openCalendar()"><svg class="ico" aria-hidden="true"><use href="#i-calendar"/></svg> 放送カレンダー</button>
+            <button class="ytab collection" id="best9-btn" onclick="goBest9()"><svg class="ico" aria-hidden="true"><use href="#i-award"/></svg> アニメ9選</button>
             <button class="ytab" id="score-btn" onclick="toggleScores()">★ 海外評価値表示</button>
           </div>
         </div>
@@ -627,17 +723,17 @@
 
     <div class="foot-note">
       視聴状況はこのブラウザ内（localStorage）に保存されます。 ·
-      <a onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
-      <a onclick="importWatch()">読み込み</a> ·
-      <a onclick="importCompare()">🆚 比較ファイルを追加</a>
+      <a role="button" tabindex="0" onclick="openExportMenu(event)">視聴履歴を書き出し（JSON / CSV / JPEG）</a> ·
+      <a role="button" tabindex="0" onclick="importWatch()">読み込み</a> ·
+      <a role="button" tabindex="0" onclick="importCompare()"><svg class="ico" aria-hidden="true"><use href="#i-users"/></svg> 比較ファイルを追加</a>
     </div>
 
     <p class="src-credit">データ: <a href="https://anilist.co" target="_blank" rel="noopener">AniList (https://anilist.co)</a> ・ 総作品数：<span id="catalog-total"></span></p>
   </main>
 </div>
 
-<div class="toast" id="toast"></div>
-<button class="to-top" id="to-top" onclick="window.scrollTo({ top: 0, behavior: 'smooth' })" title="先頭へ戻る" aria-label="先頭へ戻る">↑</button>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+<button class="to-top" id="to-top" onclick="window.scrollTo({ top: 0, behavior: scrollBehavior() })" title="先頭へ戻る" aria-label="先頭へ戻る">↑</button>
 <div class="ctx-menu" id="ctxmenu"></div>
 <div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
@@ -666,6 +762,12 @@ const CURRENT_YEAR = new Date().getFullYear();
 function seasonOrder(year) { return year === CURRENT_YEAR ? SEASON_ORDER : SEASON_ORDER_DISPLAY; }
 // 左クリックは「視聴済→多分視聴済→未マーク」の3状態のみを巡回（視聴中/視聴中止は右クリックから設定）。
 const LEFT_NEXT = { unwatched: "done", done: "maybe", maybe: "unwatched" };
+// CSS の色トークンを読む（canvas 描画や円グラフで CSS と同じ色を使うため）。
+function cssVar(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+// 「視差効果を減らす」設定ならスクロールを瞬時にする。
+function scrollBehavior() { return matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"; }
+// アイコンの <svg> を返す（スプライトは <body> 直後）。
+function ic(name) { return `<svg class="ico" aria-hidden="true"><use href="#i-${name}"/></svg>`; }
 const STATUS_JA = { done: "視聴済", watching: "視聴中", planning: "視聴予定", dropped: "視聴中止", maybe: "多分視聴済", unwatched: "未マーク" };
 // 右クリックメニューで選べる全状態（表示順）
 const CTX_STATES = [["unwatched", "未マーク"], ["planning", "視聴予定"], ["watching", "視聴中"], ["done", "視聴済"], ["dropped", "視聴中止"], ["maybe", "多分視聴済"]];
@@ -772,7 +874,7 @@ function loadWatch() {
 }
 function saveWatch() {
   try { localStorage.setItem(WATCH_KEY, JSON.stringify(watch)); }
-  catch (e) { alert("保存に失敗: " + e.message); }
+  catch (e) { toastError("保存に失敗: " + e.message); }
 }
 
 /* ---------- 視聴タイムライン（履歴ログ） ---------- */
@@ -939,7 +1041,7 @@ function loadSeries() {
 }
 function saveSeries() {
   try { localStorage.setItem(SERIES_KEY, JSON.stringify(series)); }
-  catch (e) { alert("保存に失敗: " + e.message); }
+  catch (e) { toastError("保存に失敗: " + e.message); }
 }
 /* ---------- アニメ9選の永続化 ----------
    best9 = 選んだ作品idの配列（最大9件、並び順=3×3グリッドの枠順）。
@@ -953,7 +1055,7 @@ function loadBest9() {
 }
 function saveBest9() {
   try { localStorage.setItem(BEST9_KEY, JSON.stringify(best9)); }
-  catch (e) { alert("保存に失敗: " + e.message); }
+  catch (e) { toastError("保存に失敗: " + e.message); }
 }
 // フランチャイズ統合: 劇場版などサブタイトルが毎作変わり、ベースタイトルでまとめられない
 // 長期シリーズを 1 つのキーに束ねる。原題に対するパターンで判定する（追加もここだけで済む）。
@@ -1077,11 +1179,15 @@ function airsCourSpan(a, cc) {
 function continuingInCour(cc) {
   return catalog.filter(a => passStatus(a) && airsCourSpan(a, cc) && !(a.y === cc.year && a.s === cc.season));
 }
-function toast(msg) {
+function toast(msg, opts = {}) {
   const t = document.getElementById("toast");
-  t.textContent = msg; t.classList.add("show");
-  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), 1400);
+  t.textContent = msg;
+  t.classList.toggle("error", !!opts.error);
+  t.classList.add("show");
+  clearTimeout(t._t); t._t = setTimeout(() => t.classList.remove("show"), opts.ms || 1400);
 }
+// 失敗やできなかった操作の知らせ。読み切れるよう長めに出す（alert の代わり）。
+function toastError(msg) { toast(msg, { error: true, ms: 6000 }); }
 
 /* ---------- init ---------- */
 function init() {
@@ -1180,7 +1286,7 @@ function renderYearbar() {
   const sb = document.getElementById("series-btn");   // 見たいシリーズは TOP（年別）では出さず、おすすめ／見たいシリーズ表示時のみ
   if (sb) { sb.style.display = (view.mode === "reco" || view.mode === "series") ? "" : "none"; sb.classList.toggle("active", view.mode === "series"); }
   const pb = document.getElementById("compare-btn");   // 比較相手読込済みなら名前入りラベルに
-  if (pb) { pb.classList.toggle("active", view.mode === "compare"); pb.textContent = compare ? `🆚 ${compare.name}と比較` : "🆚 比較ファイルを追加"; }
+  if (pb) { pb.classList.toggle("active", view.mode === "compare"); pb.innerHTML = ic("users") + (compare ? ` ${esc(compare.name)}と比較` : " 比較ファイルを追加"); }
   const b9 = document.getElementById("best9-btn");
   if (b9) b9.classList.toggle("active", view.mode === "best9");
 }
@@ -1201,7 +1307,7 @@ function goCompare() {
   if (!compare) { importCompare(); return; }
   navigate(() => { view = { mode: "compare", year: null }; query = ""; document.getElementById("search").value = ""; });
 }
-function setCompareCat(c) { compareCat = c; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function setCompareCat(c) { compareCat = c; render(); window.scrollTo({ top: 0, behavior: scrollBehavior() }); }
 function clearCompare() {
   if (!confirm("比較相手のデータを削除しますか？")) return;
   compare = null; saveCompare();
@@ -1387,7 +1493,7 @@ function toggleDevMode() {
   devMode = !devMode;
   try { localStorage.setItem(DEV_KEY, devMode ? "1" : "0"); } catch (e) {}
   applyDevMode();
-  toast(devMode ? "🛠 開発者モード ON" : "開発者モード OFF");
+  toast(devMode ? "開発者モード ON" : "開発者モード OFF");
   render();   // 将来ゲート対象のUIが増えたとき即座に反映されるよう再描画
 }
 
@@ -1485,8 +1591,8 @@ function airStatus(a) {
 // 放送状態のバッジ文言。airing/upcoming のみ文字を返す（finished/null は空）。
 function airLabel(a) {
   const s = airStatus(a);
-  if (s === "upcoming") return `📅 ${fmtDateInt(a.d)} 放送開始`;
-  if (s === "airing") return "🔴 放送中";
+  if (s === "upcoming") return `${ic("calendar")} ${fmtDateInt(a.d)} 放送開始`;
+  if (s === "airing") return "放送中";
   return "";
 }
 // 現クール放送中の作品（開始クール作品＋別クール開始の継続作品）を重複排除して返す。
@@ -1518,7 +1624,7 @@ function schedulePanelHtml() {
     if (s.mins >= DAY_HIDE_FROM && s.mins < DAY_HIDE_TO) continue;
     slots.push({ a, ...s });
   }
-  const head = `<div class="cp-title"><span>📺 今週の放送 <span style="color:var(--text-faint);font-weight:600">${ccLabel}</span></span></div>`;
+  const head = `<div class="cp-title"><span>${ic("tv")} 今週の放送 <span style="color:var(--text-faint);font-weight:600">${ccLabel}</span></span></div>`;
   if (!shows.length) return `${head}<div class="sched-empty">現クールの放送情報がありません。</div>`;
   const dayOrder = [0, 1, 2, 3, 4, 5, 6];   // 日月火水木金土（日曜始まり）
   const cols = dayOrder.map(d => {
@@ -1603,7 +1709,7 @@ function renderCalendar() {
     : `<div class="cal-grid">${head}${cells}</div><div class="cal-empty">この月の放送情報がありません。</div>`;
   el.innerHTML = `
     <div class="cal-head">
-      <h2>📅 放送カレンダー</h2>
+      <h2>${ic("calendar")} 放送カレンダー</h2>
       <span style="color:var(--text-faint);font-size:.82rem;font-weight:600">${cc.year}年 ${SEASON_JA[cc.season]}クール 放送中</span>
       <button class="cal-nav" onclick="calNav(-1)" title="前の月">‹</button>
       <span class="cal-month">${calY}年 ${calM + 1}月</span>
@@ -1611,7 +1717,7 @@ function renderCalendar() {
       <button class="cal-btn" onclick="calToday()">今月</button>
       <span class="cal-spacer"></span>
       <span class="cal-ics">
-        <button class="cal-btn" onclick="toggleIcsMenu(event)" title="放送予定をカレンダーアプリ用の .ics ファイルで書き出す">📥 .ics書き出し</button>
+        <button class="cal-btn" onclick="toggleIcsMenu(event)" title="放送予定をカレンダーアプリ用の .ics ファイルで書き出す">${ic("download")} .ics書き出し</button>
         <span class="cal-ics-menu" id="cal-ics-menu">
           <button class="cal-btn" onclick="exportIcs('mine')">視聴中・視聴予定の作品</button>
           <button class="cal-btn" onclick="exportIcs('all')">放送中の全作品</button>
@@ -1687,7 +1793,7 @@ function exportIcs(scope) {
 }
 
 // ---- コレクション時パネル: 視聴済の傾向（割合バー / 円グラフ切替）----
-const PIE_COLORS = ["#7c5cff", "#34d399", "#fbbf24", "#38bdf8", "#f472b6", "#f87171", "#a48bff", "#4ade80", "#94a3b8"];
+const PIE_COLORS = [cssVar("--accent"), cssVar("--done"), cssVar("--watching"), cssVar("--maybe"), cssVar("--planning"), cssVar("--dropped"), cssVar("--accent-soft"), cssVar("--chart-green"), cssVar("--chart-slate")];
 
 // 現在の集計軸(panelStat)の系列を返す。entries=[[label,value]...], total=合計, grouped=上位8+その他にまとめるか。
 function statsData() {
@@ -1734,7 +1840,7 @@ function statsPanelHtml() {
   const { watched, entries, total, grouped, empty } = statsData();
   const tab = (key, label) => `<button class="cp-tab ${panelStat === key ? "active" : ""}" onclick="setPanelStat('${key}')">${label}</button>`;
   const tabs = `<div class="cp-tabs">${tab("source", "原作")}${tab("decade", "年代")}${tab("studio", "製作会社")}${tab("rating", "評価")}</div>`;
-  const head = `<div class="cp-title"><span>📊 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
+  const head = `<div class="cp-title"><span>${ic("pie-chart")} 視聴の傾向 <span style="color:var(--text-faint);font-weight:600">${watched.length}本</span></span>${tabs}</div>`;
   if (!watched.length) return `${head}<div class="sched-empty">視聴済の作品がまだありません。</div>`;
   if (!entries.length || !total) return `${head}<div class="sched-empty">${empty}</div>`;
   let disp = entries;
@@ -1798,7 +1904,7 @@ function best9PickHtml(a) {
     ? `<img class="img" loading="lazy" src="${esc(a.img)}" alt="" onerror="this.outerHTML='<div class=&quot;noimg&quot;>${esc(a.t)}</div>'">`
     : `<div class="noimg">${esc(a.t)}</div>`;
   const r = ratingOf(a.id);
-  return `<article class="poster b9-pick${n >= 0 ? " b9-on" : ""}" onclick="toggleBest9(${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
+  return `<article class="poster b9-pick${n >= 0 ? " b9-on" : ""}" tabindex="0" role="button" aria-pressed="${n >= 0}" aria-label="${esc(a.t)}" data-fk="b${a.id}" onclick="toggleBest9(${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()" onfocus="showInfo(event,${a.id})" onblur="hideInfo()">
     ${img}
     ${n >= 0 ? `<span class="b9-mark">${n + 1}</span>` : ""}
     <div class="meta"><div class="ttl">${esc(a.t)}</div><div class="sub">${r ? `<span class="myrate">★${r}</span>` : ""}</div></div>
@@ -1812,7 +1918,7 @@ function renderBest9(el) {
       const img = a.img
         ? `<img src="${esc(a.img)}" alt="" loading="lazy">`
         : `<div class="noimg">${esc(a.t)}</div>`;
-      slots.push(`<div class="best9-slot filled${best9SwapIdx === i ? " swap-src" : ""}" onclick="best9SlotClick(${i})" oncontextmenu="return best9SlotRemove(event,${i})" title="クリック=入れ替え選択 ／ 右クリック=外す">
+      slots.push(`<div class="best9-slot filled${best9SwapIdx === i ? " swap-src" : ""}" tabindex="0" role="button" aria-label="${i + 1}位 ${esc(a.t)}" data-fk="s${i}" onclick="best9SlotClick(${i})" oncontextmenu="return best9SlotRemove(event,${i})" title="クリック=入れ替え選択 ／ 右クリック=外す">
         ${img}<div class="b9-ttl">${esc(a.t)}</div></div>`);
     } else {
       slots.push('<div class="best9-slot empty">＋</div>');
@@ -1825,10 +1931,10 @@ function renderBest9(el) {
     .sort((x, y) => (ratingOf(y.id) - ratingOf(x.id)) || ((y.sc || 0) - (x.sc || 0)));
   el.innerHTML = `
     <section class="best9">
-      <div class="b9-head"><h2>🏆 アニメ9選</h2><span class="b9-cnt">${best9.length} / 9</span></div>
+      <div class="b9-head"><h2>${ic("award")} アニメ9選</h2><span class="b9-cnt">${best9.length} / 9</span></div>
       <p class="b9-note">下の視聴済み一覧から9作品を選んでください。枠クリック=入れ替え元を選択→別の枠クリックで位置交換、右クリックで外せます。</p>
       <div class="best9-grid">${slots.join("")}</div>
-      <div class="b9-actions"><button class="ytab collection" onclick="exportBest9()" ${best9.length ? "" : "disabled"}>📸 画像として保存</button></div>
+      <div class="b9-actions"><button class="ytab collection" onclick="exportBest9()" ${best9.length ? "" : "disabled"}>${ic("image")} 画像として保存</button></div>
       <div class="b9-head"><h2>視聴済みから選ぶ</h2><span class="b9-cnt">${pool.length}作品${query ? "（検索中）" : ""}</span></div>
       ${pool.length ? `<div class="grid">${pool.map(best9PickHtml).join("")}</div>` : '<p class="b9-note">視聴済みの作品がありません。先に作品を視聴済みにマークしてください。</p>'}
     </section>`;
@@ -1838,7 +1944,7 @@ function renderBest9(el) {
    （上の exportImage がテキストのみなのは crossOrigin 未指定時代の制約）。 */
 async function exportBest9() {
   const items = best9.map(id => catalog.find(a => a.id === id)).filter(Boolean);
-  if (items.length === 0) { alert("作品が選ばれていません。"); return; }
+  if (items.length === 0) { toastError("作品が選ばれていません。"); return; }
   const date = new Date().toISOString().slice(0, 10);
   toast("画像を生成中…");
   // ポスターを CORS 付きで並行ロード。失敗した枠はグレー地+タイトルで代替描画する。
@@ -1863,11 +1969,11 @@ async function exportBest9() {
   ctx.scale(scale, scale);
   const JP = '"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN",sans-serif';
 
-  ctx.fillStyle = "#0d0e12"; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#7c5cff"; ctx.fillRect(0, 0, W, 6);
-  ctx.fillStyle = "#e8eaef"; ctx.font = `800 30px ${JP}`;
+  ctx.fillStyle = cssVar("--bg"); ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = cssVar("--accent"); ctx.fillRect(0, 0, W, 6);
+  ctx.fillStyle = cssVar("--text"); ctx.font = `800 30px ${JP}`;
   ctx.fillText("私のアニメ9選", pad, 56);
-  ctx.fillStyle = "#5f6675"; ctx.font = `400 14px ${JP}`;
+  ctx.fillStyle = cssVar("--text-faint"); ctx.font = `400 14px ${JP}`;
   ctx.fillText(`${date} 書き出し`, pad, 80);
 
   for (let i = 0; i < 9; i++) {
@@ -1876,7 +1982,7 @@ async function exportBest9() {
     const y = headerH + row * (ph + titleH + gap);
     const a = items[i];
     if (!a) {   // 空き枠は薄い枠線のみ
-      ctx.strokeStyle = "#272b36";
+      ctx.strokeStyle = cssVar("--border");
       ctx.strokeRect(x + .5, y + .5, cell - 1, ph - 1);
       continue;
     }
@@ -1889,12 +1995,12 @@ async function exportBest9() {
       else { sh = im.width / dr; sy = (im.height - sh) / 2; }
       ctx.drawImage(im, sx, sy, sw, sh, x, y, cell, ph);
     } else {
-      ctx.fillStyle = "#15171e"; ctx.fillRect(x, y, cell, ph);
-      ctx.fillStyle = "#5f6675"; ctx.font = `400 13px ${JP}`;
+      ctx.fillStyle = cssVar("--bg-elev"); ctx.fillRect(x, y, cell, ph);
+      ctx.fillStyle = cssVar("--text-faint"); ctx.font = `400 13px ${JP}`;
       ctx.fillText("NO IMAGE", x + 14, y + ph / 2);
     }
     // タイトル（枠幅に収まるよう末尾を省略、既存 exportImage と同じ手法）
-    ctx.fillStyle = "#e8eaef"; ctx.font = `700 14px ${JP}`;
+    ctx.fillStyle = cssVar("--text"); ctx.font = `700 14px ${JP}`;
     let t = a.t;
     while (ctx.measureText(t).width > cell && t.length > 2) t = t.slice(0, -1);
     if (t !== a.t) t += "…";
@@ -1905,12 +2011,12 @@ async function exportBest9() {
 
   try {
     canvas.toBlob(b => {
-      if (!b) { alert("画像の生成に失敗しました。"); return; }
+      if (!b) { toastError("画像の生成に失敗しました。"); return; }
       saveFile(b, `anime-best9-${date}.jpg`, "9選画像を書き出しました");
     }, "image/jpeg", 0.92);
   } catch (e) {
     // 画像が CORS 非対応だった場合 toBlob が SecurityError を投げる保険
-    alert("画像の書き出しに失敗しました（ポスター画像のCORS制限の可能性）: " + e.message);
+    toastError("画像の書き出しに失敗しました（ポスター画像のCORS制限の可能性）: " + e.message);
   }
 }
 
@@ -1951,7 +2057,7 @@ function render() {
     } else {
       msg = "この条件の作品がありません。";
     }
-    list.innerHTML = sortBar + `<div class="notice"><div class="big">🔍</div><p>${msg}</p></div>`;
+    list.innerHTML = sortBar + `<div class="notice"><div class="big">${ic("search")}</div><p>${msg}</p></div>`;
     return;
   }
 
@@ -2090,7 +2196,7 @@ function recentGroupsHtml(items) {
 function renderRecent(list) {
   const items = catalog.filter(a => a.a && passStatus(a));
   if (items.length === 0) {
-    list.innerHTML = `<div class="notice"><div class="big">🆕</div><p>新着作品がありません。</p></div>`;
+    list.innerHTML = `<div class="notice"><div class="big">${ic("list-plus")}</div><p>新着作品がありません。</p></div>`;
     return;
   }
   list.innerHTML = recentGroupsHtml(items);   // 追加日（更新日）→年代→年→クールで階層表示
@@ -2122,7 +2228,7 @@ function clearHistory() {
 }
 function renderTimeline(list) {
   if (!history.length) {
-    list.innerHTML = `<div class="notice"><div class="big">🕒</div><p>まだ視聴記録がありません。<br>話数を記録したり作品を視聴済にすると、ここに日付順で残ります。</p></div>`;
+    list.innerHTML = `<div class="notice"><div class="big">${ic("clock")}</div><p>まだ視聴記録がありません。<br>話数を記録したり作品を視聴済にすると、ここに日付順で残ります。</p></div>`;
     return;
   }
   // 新着順のまま視聴日（ローカル日付）でグルーピング。
@@ -2135,7 +2241,7 @@ function renderTimeline(list) {
     if (!(key in idx)) { idx[key] = groups.length; groups.push({ dt, evs: [] }); }
     groups[idx[key]].evs.push({ ev, i });
   });
-  let html = `<div class="tl-head"><div class="tl-title">🕒 視聴タイムライン<span class="tl-count">${history.length}件</span></div>`
+  let html = `<div class="tl-head"><div class="tl-title">${ic("clock")} 視聴タイムライン<span class="tl-count">${history.length}件</span></div>`
     + `<button class="tl-clear" onclick="clearHistory()">履歴をクリア</button></div>`;
   for (const g of groups) {
     html += `<div class="tl-day">${tlDayLabel(g.dt)}</div><div class="tl-list">`;
@@ -2211,15 +2317,15 @@ function renderReco(list) {
   // シリーズごと興味なしの作品（形式フィルタは尊重）。件数はシリーズ単位で数える。
   const seriesHiddenItems = catalog.filter(a => isSeriesHidden(a) && formatFilter.has(a.f));
   const seriesHiddenCount = new Set(seriesHiddenItems.map(seriesKey)).size;
-  const hideToggle = `<button class="reco-toggle ${recoShowHidden ? "active" : ""}" onclick="toggleRecoHidden()">${recoShowHidden ? "← おすすめに戻る" : `🚫 興味なし ${hiddenItems.length}件`}</button>`;
-  const seriesHideToggle = `<button class="reco-toggle ${recoShowSeriesHidden ? "active" : ""}" onclick="toggleRecoSeriesHidden()">${recoShowSeriesHidden ? "← おすすめに戻る" : `🚫 シリーズ興味なし ${seriesHiddenCount}件`}</button>`;
+  const hideToggle = `<button class="reco-toggle ${recoShowHidden ? "active" : ""}" onclick="toggleRecoHidden()">${recoShowHidden ? "← おすすめに戻る" : `${ic("ban")} 興味なし ${hiddenItems.length}件`}</button>`;
+  const seriesHideToggle = `<button class="reco-toggle ${recoShowSeriesHidden ? "active" : ""}" onclick="toggleRecoSeriesHidden()">${recoShowSeriesHidden ? "← おすすめに戻る" : `${ic("ban")} シリーズ興味なし ${seriesHiddenCount}件`}</button>`;
 
   // 「興味なし一覧」表示モード（おすすめページ内のみ。右クリックで解除できる）。
   if (recoShowHidden) {
-    const banner = `<div class="reco-banner"><b>🚫 興味なし（おすすめ非表示）</b> ${hiddenItems.length}件 ${hideToggle}${seriesHiddenItems.length ? " " + seriesHideToggle : ""}<div class="reco-sub">作品を右クリック →「✅ おすすめに表示する」で解除できます。</div></div>`;
+    const banner = `<div class="reco-banner"><b>${ic("ban")} 興味なし（おすすめ非表示）</b> ${hiddenItems.length}件 ${hideToggle}${seriesHiddenItems.length ? " " + seriesHideToggle : ""}<div class="reco-sub">作品を右クリック →「おすすめに表示する」で解除できます。</div></div>`;
     list.innerHTML = hiddenItems.length
       ? banner + `<div class="grid">${hiddenItems.map(a => posterHtml(a)).join("")}</div>`
-      : `${banner}<div class="notice"><div class="big">🚫</div><p>「興味なし」にした作品はありません。</p></div>`;
+      : `${banner}<div class="notice"><div class="big">${ic("ban")}</div><p>「興味なし」にした作品はありません。</p></div>`;
     return;
   }
 
@@ -2232,14 +2338,14 @@ function renderReco(list) {
       const arr = byKey[k].sort((a, b) => (a.y || 0) - (b.y || 0) || (a.d || 0) - (b.d || 0));
       const heading = primeBaseTitle(arr[0].t) || arr[0].t;
       return `<div class="series-block">
-        <div class="series-head">🚫 ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
+        <div class="series-head">${ic("ban")} ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
         <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
       </div>`;
     }).join("");
-    const banner = `<div class="reco-banner"><b>🚫 シリーズ興味なし（おすすめ非表示）</b> ${seriesHiddenCount}シリーズ・${seriesHiddenItems.length}作品 ${hideToggle} ${seriesHideToggle}<div class="reco-sub">作品を右クリック →「✅ シリーズの興味なしを解除」で外せます。</div></div>`;
+    const banner = `<div class="reco-banner"><b>${ic("ban")} シリーズ興味なし（おすすめ非表示）</b> ${seriesHiddenCount}シリーズ・${seriesHiddenItems.length}作品 ${hideToggle} ${seriesHideToggle}<div class="reco-sub">作品を右クリック →「シリーズの興味なしを解除」で外せます。</div></div>`;
     list.innerHTML = seriesHiddenItems.length
       ? banner + blocks
-      : `${banner}<div class="notice"><div class="big">🚫</div><p>「シリーズごと興味なし」にしたシリーズはありません。</p></div>`;
+      : `${banner}<div class="notice"><div class="big">${ic("ban")}</div><p>「シリーズごと興味なし」にしたシリーズはありません。</p></div>`;
     return;
   }
 
@@ -2255,31 +2361,31 @@ function renderReco(list) {
     const note = `<div class="reco-banner"><b>おすすめの精度を上げるには</b> 作品を視聴済みにしたり★評価を付けると、好みに合わせた提案になります。今はまず海外で高評価の作品を表示しています。${toggleBit}</div>`;
     list.innerHTML = top.length
       ? note + `<div class="grid">${top.map(a => posterHtml(a)).join("")}</div>`
-      : `<div class="notice"><div class="big">✨</div><p>おすすめできる未視聴作品がありません。形式フィルタを確認してください。</p></div>`;
+      : `<div class="notice"><div class="big">${ic("compass")}</div><p>おすすめできる未視聴作品がありません。形式フィルタを確認してください。</p></div>`;
     return;
   }
 
   const scored = candidates.map(a => [a, recoScore(a, aff)]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, RECO_LIMIT);
   if (!scored.length) {
-    list.innerHTML = `<div class="reco-banner"><b>✨ おすすめ</b>${toggleBit}</div><div class="notice"><div class="big">✨</div><p>条件に合うおすすめが見つかりませんでした。形式フィルタを広げてみてください。</p></div>`;
+    list.innerHTML = `<div class="reco-banner"><b>${ic("compass")} おすすめ</b>${toggleBit}</div><div class="notice"><div class="big">${ic("compass")}</div><p>条件に合うおすすめが見つかりませんでした。形式フィルタを広げてみてください。</p></div>`;
     return;
   }
   const topLabels = ax => Object.entries(aff[ax]).filter(e => e[1] > 0).sort((x, y) => y[1] - x[1]).slice(0, 3).map(e => e[0]);
   const sumBits = [["ジャンル", topLabels("g")], ["原作", topLabels("src")], ["制作会社", topLabels("st")]]
     .filter(b => b[1].length)
     .map(b => `<span class="reco-sum-axis"><span class="k">${b[0]}</span>${b[1].map(esc).join(" / ")}</span>`).join("");
-  const banner = `<div class="reco-banner"><b>✨ あなたの好みに近い未視聴作品</b>${toggleBit}${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
+  const banner = `<div class="reco-banner"><b>${ic("compass")} あなたの好みに近い未視聴作品</b>${toggleBit}${sumBits ? `<div class="reco-sum">${sumBits}</div>` : ""}</div>`;
   list.innerHTML = banner + `<div class="grid">${scored.map(([a]) => posterHtml(a)).join("")}</div>`;
 }
-function toggleRecoHidden() { recoShowHidden = !recoShowHidden; recoShowSeriesHidden = false; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
-function toggleRecoSeriesHidden() { recoShowSeriesHidden = !recoShowSeriesHidden; recoShowHidden = false; render(); window.scrollTo({ top: 0, behavior: "smooth" }); }
+function toggleRecoHidden() { recoShowHidden = !recoShowHidden; recoShowSeriesHidden = false; render(); window.scrollTo({ top: 0, behavior: scrollBehavior() }); }
+function toggleRecoSeriesHidden() { recoShowSeriesHidden = !recoShowSeriesHidden; recoShowHidden = false; render(); window.scrollTo({ top: 0, behavior: scrollBehavior() }); }
 
 // 「見たいシリーズ」専用ビュー。want 登録シリーズの全話をシリーズ単位でまとめて表示する。
 // 形式フィルタは尊重、状態フィルタは無視（おすすめと同方針）。
 function renderSeriesWant(list) {
   const items = catalog.filter(a => isSeriesWanted(a) && formatFilter.has(a.f));
   if (!items.length) {
-    list.innerHTML = `<div class="notice"><div class="big">📺</div><p>「見たいシリーズ」はまだありません。<br>作品を右クリック →「📺 シリーズを見たいリストに追加」で登録できます。</p></div>`;
+    list.innerHTML = `<div class="notice"><div class="big">${ic("tv")}</div><p>「見たいシリーズ」はまだありません。<br>作品を右クリック →「シリーズを見たいリストに追加」で登録できます。</p></div>`;
     return;
   }
   // シリーズキーでグルーピング。各シリーズ内は年・公開順（y→d）で並べる。
@@ -2290,11 +2396,11 @@ function renderSeriesWant(list) {
     const arr = byKey[k].sort((a, b) => (a.y || 0) - (b.y || 0) || (a.d || 0) - (b.d || 0));
     const heading = primeBaseTitle(arr[0].t) || arr[0].t;
     return `<div class="series-block">
-      <div class="series-head">📺 ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
+      <div class="series-head">${ic("tv")} ${esc(heading)} <span class="series-count">${arr.length}作品</span></div>
       <div class="grid">${arr.map(a => posterHtml(a)).join("")}</div>
     </div>`;
   }).join("");
-  const banner = `<div class="reco-banner"><b>📺 見たいシリーズ</b> ${keys.length}シリーズ・${items.length}作品<div class="reco-sub">作品を右クリック →「✅ シリーズを見たいリストから解除」で外せます。</div></div>`;
+  const banner = `<div class="reco-banner"><b>${ic("tv")} 見たいシリーズ</b> ${keys.length}シリーズ・${items.length}作品<div class="reco-sub">作品を右クリック →「シリーズを見たいリストから解除」で外せます。</div></div>`;
   list.innerHTML = banner + blocks;
 }
 
@@ -2302,7 +2408,7 @@ function renderSeriesWant(list) {
 // 形式フィルタは尊重、状態フィルタは無視（比較カテゴリで絞る）。グルーピングは年代→年→クールを再利用。
 function renderCompare(list) {
   if (!compare) {
-    list.innerHTML = `<div class="notice"><div class="big">🆚</div><p>比較するファイルがありません。<br>フッターまたは左の「🆚 比較ファイルを追加」から、相手が書き出した視聴履歴 JSON を読み込んでください。</p></div>`;
+    list.innerHTML = `<div class="notice"><div class="big">${ic("users")}</div><p>比較するファイルがありません。<br>フッターまたは左の「比較ファイルを追加」から、相手が書き出した視聴履歴 JSON を読み込んでください。</p></div>`;
     return;
   }
   // どちらかが視聴済みの作品のみが比較対象（none を除外）。
@@ -2315,7 +2421,7 @@ function renderCompare(list) {
   const nm = esc(compare.name);
   const tab = (c, label, n) => `<button class="cp-tab ${compareCat === c ? "active" : ""}" onclick="setCompareCat('${c}')">${label} ${n}</button>`;
   const banner = `<div class="reco-banner cmp-banner">
-    <div class="cmp-banner-head"><b>🆚 ${nm} さんとの視聴比較</b>
+    <div class="cmp-banner-head"><b>${ic("users")} ${nm} さんとの視聴比較</b>
       <button class="reco-toggle" onclick="clearCompare()">✕ 比較を解除</button></div>
     <div class="cmp-sum"><span class="cmp-key both">共通 ${both.length}作品</span>（一致度 <b>${pct}%</b>）・
       <span class="cmp-key mine">あなただけ ${mine.length}</span>・
@@ -2324,7 +2430,7 @@ function renderCompare(list) {
     <div class="reco-sub">左クリックで自分の視聴状況を変更できます（相手のデータは変わりません）。</div>
   </div>`;
   if (!items.length) {
-    list.innerHTML = banner + `<div class="notice"><div class="big">🔍</div><p>この条件の作品がありません。形式フィルタやカテゴリを確認してください。</p></div>`;
+    list.innerHTML = banner + `<div class="notice"><div class="big">${ic("search")}</div><p>この条件の作品がありません。形式フィルタやカテゴリを確認してください。</p></div>`;
     return;
   }
   list.innerHTML = banner + decadeGroupsHtml(items);   // 年代→年→クールでクールごとに対比表示
@@ -2351,7 +2457,7 @@ function importCompare() {
         const win = window.open(location.pathname + "#compare", "_blank");
         if (!win) { goCompare(); }   // ポップアップブロック時はその場で比較ビューへ
         else toast(`${name} さんの視聴データを読み込みました（別タブで比較）`);
-      } catch (e) { alert("読み込み失敗: " + e.message); }
+      } catch (e) { toastError("読み込み失敗: " + e.message); }
     };
     reader.readAsText(file);
   };
@@ -2446,7 +2552,7 @@ function posterHtml(a, continuing) {
   const totalEp = isMovie ? 0 : (a.ep || 0);   // 進捗バッジ用の総話数（劇場版は対象外）
   const prog = st === "watching" ? `<span class="prog">▶${totalEp ? ep + "/" + totalEp : (ep ? ep + "話" : "視聴中")}</span>`
              : st === "dropped" ? `<span class="prog dropped">■${totalEp ? ep + "/" + totalEp + "で" : (ep ? ep + "話で" : "")}中止</span>`
-             : (st === "unwatched" && airStatus(a) === "upcoming") ? `<span class="prog upcoming">📅予定</span>` : "";
+             : (st === "unwatched" && airStatus(a) === "upcoming") ? `<span class="prog upcoming">${ic("calendar")}予定</span>` : "";
   const r = ratingOf(a.id);
   const myRate = r ? `<span class="myrate">★${r}</span>` : "";
   const img = a.img
@@ -2466,10 +2572,10 @@ function posterHtml(a, continuing) {
       : `<span class="cmp-them none">${esc(compare.name)}: —</span>`;
     cmpRow = `<div class="cmp-row">${meBit}${themBit}</div>`;
   }
-  return `<article class="poster ${st}${cmpClass}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()">
+  return `<article class="poster ${st}${cmpClass}" tabindex="0" role="button" aria-label="${esc(a.t)}（${STATUS_JA[st] || "未マーク"}）" data-fk="p${a.id}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()" onfocus="showInfo(event,${a.id})" onblur="hideInfo()">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : `<span class="score noscore">★-.-</span>`}
-    <button class="pinfo" type="button" onclick="pinInfo(event,${a.id})" aria-label="作品情報を表示">i</button>
+    <button class="pinfo" type="button" onclick="pinInfo(event,${a.id})" aria-label="作品情報を表示">${ic("info")}</button>
     <span class="status">${statusIcon(st)}</span>
     <div class="meta">
       <div class="ttl">${esc(a.t)}</div>
@@ -2509,7 +2615,7 @@ let ctxOpenedAt = 0;
 let ctxPos = { x: 0, y: 0 };
 let ctxId = null;        // 右クリックメニューが今表示している作品ID
 let songOpenId = null;   // OP/ED曲リストを展開中の作品ID
-const STAT_ICON = { unwatched: "·", planning: "🔖", watching: "▶", done: "✓", dropped: "×", maybe: "?" };
+const STAT_ICON = { unwatched: "·", planning: ic("bookmark"), watching: "▶", done: "✓", dropped: "×", maybe: "?" };
 function ctxInner(a) {
   const id = a.id;
   const cur = statusOf(id), r = ratingOf(id), ep = epOf(id);
@@ -2524,9 +2630,9 @@ function ctxInner(a) {
   const epProg = total ? ` <span style="color:var(--text-faint)">(${ep}/${total})</span>`
                : (ep ? ` <span style="color:var(--text-faint)">(${ep}話)</span>` : "");
   const epRow = a.f !== "MOVIE"
-    ? `<div class="ctx-item" onclick="event.stopPropagation();openEpModal(${id})">🎬 話数を記録${epProg}</div>`
+    ? `<div class="ctx-item" onclick="event.stopPropagation();openEpModal(${id})">${ic("list-checks")} 話数を記録${epProg}</div>`
     : "";
-  const noteRow = `<div class="ctx-item" onclick="event.stopPropagation();openNoteModal(${id})">📝 感想を書く${noteOf(id) ? " ✓" : ""}</div>`;
+  const noteRow = `<div class="ctx-item" onclick="event.stopPropagation();openNoteModal(${id})">${ic("pencil")} 感想を書く${noteOf(id) ? " ✓" : ""}</div>`;
   return `
     <div class="ctx-title">${esc(a.t)}</div>
     <div class="ctx-stars" onclick="event.stopPropagation()" title="自分の評価（同じ星を再クリックで解除）">${stars}</div>
@@ -2535,21 +2641,21 @@ function ctxInner(a) {
     ${epRow}
     ${noteRow}
     ${(view.mode === "reco" || view.mode === "series") ? `
-    <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? "✅ おすすめに表示する" : "🚫 おすすめに出さない"}</div>
-    <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? "✅ シリーズを見たいリストから解除" : "📺 シリーズを見たいリストに追加"}</div>
-    <div class="ctx-item ctx-hide ${isSeriesHidden(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesHide(${id})">${isSeriesHidden(a) ? "✅ シリーズの興味なしを解除" : "🚫 シリーズごと興味なし"}</div>` : ""}
+    <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? ic("check") + " おすすめに表示する" : ic("ban") + " おすすめに出さない"}</div>
+    <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? ic("check") + " シリーズを見たいリストから解除" : ic("tv") + " シリーズを見たいリストに追加"}</div>
+    <div class="ctx-item ctx-hide ${isSeriesHidden(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesHide(${id})">${isSeriesHidden(a) ? ic("check") + " シリーズの興味なしを解除" : ic("ban") + " シリーズごと興味なし"}</div>` : ""}
     <div class="ctx-divider"></div>
-    <div class="ctx-item" onclick="openWiki(${id})">📖 Wikipediaで開く</div>
-    ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">🔗 公式サイトを開く</div>` : ""}
+    <div class="ctx-item" onclick="openWiki(${id})">${ic("book-open")} Wikipediaで開く</div>
+    ${a.os ? `<div class="ctx-item" onclick="openOfficial(${id})">${ic("external-link")} 公式サイトを開く</div>` : ""}
     ${isPrimeDirect(a)
-      ? `<div class="ctx-item" onclick="openPrime(${id})">▶️ プライム・ビデオで開く</div>`
-      : `<div class="ctx-item" onclick="openPrimeSearch(${id})">🔍 プライム・ビデオで検索</div>`}
-    ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">🔍 ${SV_NAMES[c] || c}で検索</div>`).join("")}
-    <div class="ctx-item ${songOpenId === id ? "on" : ""}" onclick="event.stopPropagation();toggleSongs(${id})">🎵 OP/ED曲を動画サイトで探す ${songOpenId === id ? "▾" : "▸"}</div>
+      ? `<div class="ctx-item" onclick="openPrime(${id})">${ic("play")} プライム・ビデオで開く</div>`
+      : `<div class="ctx-item" onclick="openPrimeSearch(${id})">${ic("search")} プライム・ビデオで検索</div>`}
+    ${(Array.isArray(a.sv) ? a.sv.filter(c => c !== "prime") : []).map(c => `<div class="ctx-item" onclick="openStreamSearch(${id},'${c}')">${ic("search")} ${SV_NAMES[c] || c}で検索</div>`).join("")}
+    <div class="ctx-item ${songOpenId === id ? "on" : ""}" onclick="event.stopPropagation();toggleSongs(${id})">${ic("music")} OP/ED曲を動画サイトで探す ${songOpenId === id ? "▾" : "▸"}</div>
     ${songOpenId === id ? songsPanelHtml(a) : ""}
     ${isDevMode() ? `
-    <div class="ctx-item" onclick="openAniList(${id})">🌐 AniListで開く</div>
-    <div class="ctx-item" onclick="openNyaa(${id})">🧲 Nyaa Torrentで検索</div>` : ""}`;
+    <div class="ctx-item" onclick="openAniList(${id})">${ic("globe")} AniListで開く</div>
+    <div class="ctx-item" onclick="openNyaa(${id})">${ic("magnet")} Nyaa Torrentで検索</div>` : ""}`;
 }
 function positionCtx() {
   const m = document.getElementById("ctxmenu");
@@ -2557,19 +2663,59 @@ function positionCtx() {
   m.style.left = Math.max(4, Math.min(ctxPos.x, window.innerWidth - r.width - 8)) + "px";
   m.style.top = Math.max(4, Math.min(ctxPos.y, window.innerHeight - r.height - 8)) + "px";
 }
+/* ---------- キーボード操作 ----------
+   onclick を持つ div/span/article を Tab で選べるようにし、Enter/Space で click させる。
+   メニューは innerHTML で作り直すため、表示のたびに makeFocusable で付け直す。 */
+function makeFocusable(root) {
+  root.querySelectorAll("[onclick]:not(button):not(input):not(a[href]):not(.ctx-stars)").forEach(el => {
+    if (!el.hasAttribute("tabindex")) el.setAttribute("tabindex", "0");
+    if (!el.hasAttribute("role")) el.setAttribute("role", "button");
+  });
+}
+// キーボード由来のイベント（マウス座標が無い）なら、対象要素の位置を返す。
+function eventPoint(e) {
+  if (e.clientX || e.clientY) return { x: e.clientX, y: e.clientY };
+  const t = e.currentTarget && e.currentTarget.getBoundingClientRect ? e.currentTarget : e.target;
+  const r = t.getBoundingClientRect();
+  return { x: r.left + Math.min(24, r.width / 2), y: r.top + Math.min(24, r.height / 2) };
+}
+document.addEventListener("keydown", e => {
+  if (e.key !== "Enter" && e.key !== " ") return;
+  const el = e.target;
+  if (!el.matches('[role="button"][tabindex]') || el.matches("button, input, textarea, a[href]")) return;
+  e.preventDefault();
+  const fk = el.dataset.fk;
+  el.click();
+  // click で再描画されて要素が差し替わったら、同じ作品の新しい要素へフォーカスを戻す。
+  if (fk && !document.body.contains(el)) {
+    const next = document.querySelector(`[data-fk="${fk}"]`);
+    if (next) next.focus();
+  }
+});
+
+let ctxReturnFk = null;   // キーボードで開いたメニューを閉じたときにフォーカスを戻す作品（data-fk）
 function showCtxMenu(e, id) {
   e.preventDefault();
   const a = catalog.find(x => x.id === id);
   if (!a) return false;
   hideInfo();
   ctxOpenedAt = Date.now();
-  ctxPos = { x: e.clientX, y: e.clientY };
+  ctxPos = eventPoint(e);
   ctxId = id;
   songOpenId = null;
   const m = document.getElementById("ctxmenu");
   m.innerHTML = ctxInner(a);
+  makeFocusable(m);
   m.classList.add("show");
   positionCtx();
+  // 右クリック以外（メニューキー / Shift+F10）で開いたら、最初の項目にフォーカスを移す。
+  if (e.button !== 2) {
+    ctxReturnFk = (e.currentTarget && e.currentTarget.dataset) ? e.currentTarget.dataset.fk || null : null;
+    const first = m.querySelector("[tabindex]");
+    if (first) first.focus();
+  } else {
+    ctxReturnFk = null;
+  }
   return false;
 }
 // 状態・評価を変更してもメニューは開いたまま再描画する。
@@ -2578,8 +2724,16 @@ function rebuildCtx(id) {
   if (!m.classList.contains("show")) return;
   const a = catalog.find(x => x.id === id);
   if (!a) return;
+  // 作り直す前にフォーカス中の項目の順番を覚えておき、作り直した後に同じ位置へ戻す。
+  const items = [...m.querySelectorAll("[tabindex]")];
+  const focusIdx = items.indexOf(document.activeElement);
   m.innerHTML = ctxInner(a);
+  makeFocusable(m);
   positionCtx();
+  if (focusIdx >= 0) {
+    const again = m.querySelectorAll("[tabindex]")[focusIdx];
+    if (again) again.focus();
+  }
 }
 function pickStatus(id, status) {
   setStatus(id, status, epOf(id));
@@ -2616,7 +2770,13 @@ function pickRating(id, n) {
   renderStats(); updatePoster(id); rebuildCtx(id);
 }
 function hideCtxMenu() {
-  document.getElementById("ctxmenu").classList.remove("show");
+  const m = document.getElementById("ctxmenu");
+  const hadFocus = m.contains(document.activeElement);
+  m.classList.remove("show");
+  // メニュー操作で作品のポスターが差し替わっていることがあるので、data-fk で探し直す。
+  const back = hadFocus && ctxReturnFk ? document.querySelector(`[data-fk="${ctxReturnFk}"]`) : null;
+  if (back) back.focus();
+  ctxReturnFk = null;
 }
 document.addEventListener("click", hideCtxMenu);
 document.addEventListener("contextmenu", e => { if (!e.defaultPrevented) hideCtxMenu(); });
@@ -2697,9 +2857,9 @@ function renderEpModal(id) {
       const dot = epNoteOf(id, n) ? '<span class="dot">●</span>' : "";
       chips += `<button class="ep-chip ${eps.has(n) ? "on" : ""}${noted}" onclick="epChipClick(${id},${n},${total},event.shiftKey);afterEpChange(${id})" oncontextmenu="epChipClick(${id},${n},${total},true);afterEpChange(${id});return false">${n}${dot}</button>`;
     }
-    grid = `<div class="ep-grid">${chips}</div><div class="ep-hint">💡 一気見した話は範囲でまとめて記録: 起点をクリック → 終点を右クリック（Shift+クリックでも可）</div>`;
+    grid = `<div class="ep-grid">${chips}</div><div class="ep-hint">一気見した話は範囲でまとめて記録: 起点をクリック → 終点を右クリック（Shift+クリックでも可）</div>`;
   }
-  const progRight = nx ? `　次: 第${nx}話` : (total && watched >= total ? "　🎉 完走" : "");
+  const progRight = nx ? `　次: 第${nx}話` : (total && watched >= total ? "　完走" : "");
   const aLbl = airLabel(a);
   const airBit = aLbl ? ` <span class="air-badge ${airStatus(a)}">${aLbl}</span>` : "";
   const upto = `<div class="ep-upto">ここまで見た:
@@ -2711,7 +2871,7 @@ function renderEpModal(id) {
   const lastEp = epsOf(id).length ? Math.max(...epsOf(id)) : 1;
   const selN = epcSel > 0 ? epcSel : lastEp;
   const epcBlock = `
-    <div class="ep-seclabel">各話の感想（💬は感想あり）</div>
+    <div class="ep-seclabel">各話の感想（●は感想あり）</div>
     <div class="epc">
       <div class="epc-lbl">第 <input type="number" min="1" ${total ? `max="${total}"` : ""} value="${selN}" style="width:54px"
         onclick="event.stopPropagation()" onchange="epcSel=parseInt(this.value,10)||1;renderEpModal(${id})"> 話のひとこと</div>
@@ -2727,7 +2887,7 @@ function renderEpModal(id) {
     ${grid}
     ${upto}
     ${epcBlock}
-    <div class="ep-actions">${allBtn}${plusBtn}<button class="ep-btn ghost" onclick="openNoteModal(${id})">📝 作品の感想${noteOf(id) ? " ✓" : ""}</button><button class="ep-btn ghost" onclick="clearEps(${id});afterEpChange(${id})">クリア</button></div>`;
+    <div class="ep-actions">${allBtn}${plusBtn}<button class="ep-btn ghost" onclick="openNoteModal(${id})">${ic("pencil")} 作品の感想${noteOf(id) ? " ✓" : ""}</button><button class="ep-btn ghost" onclick="clearEps(${id});afterEpChange(${id})">クリア</button></div>`;
 }
 document.addEventListener("keydown", e => { if (e.key === "Escape" && epModalId != null) closeEpModal(); });
 
@@ -2766,7 +2926,7 @@ function renderNoteModal(id) {
   if (!a) { closeNoteModal(); return; }
   m.innerHTML = `
     <div class="ep-head">
-      <div class="ep-ttl">📝 ${esc(a.t)}</div>
+      <div class="ep-ttl">${ic("pencil")} ${esc(a.t)}</div>
       <button class="ep-close" onclick="closeNoteModal()" aria-label="閉じる">×</button>
     </div>
     <div class="ep-seclabel">この作品の感想</div>
@@ -2915,11 +3075,11 @@ function showInfo(e, id) {
   }).join("");
   const airRow = airInfoRow(a);
   const myR = ratingOf(a.id), wSt = statusOf(a.id), wEp = epOf(a.id);
-  const myRow = myR ? `<div class="ic-row"><span class="ic-k">自分評価</span><span style="color:#fcd34d">${"★".repeat(myR)}</span><span style="color:var(--text-faint)">${"★".repeat(5 - myR)}</span></div>` : "";
+  const myRow = myR ? `<div class="ic-row"><span class="ic-k">自分評価</span><span style="color:var(--star)">${"★".repeat(myR)}</span><span style="color:var(--text-faint)">${"★".repeat(5 - myR)}</span></div>` : "";
   const wRow = wSt === "watching" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中${wEp ? `（${wEp}話まで）` : ""}</div>`
              : wSt === "dropped" ? `<div class="ic-row"><span class="ic-k">視聴状況</span>視聴中止${wEp ? `（${wEp}話で）` : ""}</div>` : "";
   const note = noteOf(a.id);
-  const noteRow = note ? `<div class="ic-note">📝 ${esc(note.length > 90 ? note.slice(0, 90) + "…" : note)}</div>` : "";
+  const noteRow = note ? `<div class="ic-note">${ic("pencil")} ${esc(note.length > 90 ? note.slice(0, 90) + "…" : note)}</div>` : "";
   card.innerHTML =
     `<div class="ic-title">${esc(a.t)}</div>` +
     (a.src ? `<div class="ic-row"><span class="ic-k">原作</span>${esc(a.src)}${a.nr ? ' <span class="ic-narou">なろう発</span>' : ""}${a.kk ? ' <span class="ic-kakuyomu">カクヨム発</span>' : ""}${a.mg ? ` <span class="ic-mag">${esc(a.mg)}</span>` : ""}</div>` : "") +
@@ -3211,13 +3371,16 @@ function openExportMenu(e) {
   const m = document.getElementById("exportmenu");
   m.innerHTML = `
     <div class="ctx-title">書き出し形式を選択</div>
-    <div class="ctx-item" onclick="exportData('json')">🗎 JSON（バックアップ・読み込み用）</div>
-    <div class="ctx-item" onclick="exportData('csv')">📊 CSV（表計算ソフト用）</div>
-    <div class="ctx-item" onclick="exportData('jpeg')">🖼 JPEG（画像で保存）</div>`;
+    <div class="ctx-item" onclick="exportData('json')">${ic("file-text")} JSON（バックアップ・読み込み用）</div>
+    <div class="ctx-item" onclick="exportData('csv')">${ic("table")} CSV（表計算ソフト用）</div>
+    <div class="ctx-item" onclick="exportData('jpeg')">${ic("image")} JPEG（画像で保存）</div>`;
+  makeFocusable(m);
   m.classList.add("show");
   const r = m.getBoundingClientRect();
-  m.style.left = Math.max(4, Math.min(e.clientX, window.innerWidth - r.width - 8)) + "px";
-  m.style.top = Math.max(4, Math.min(e.clientY, window.innerHeight - r.height - 8)) + "px";
+  const pt = eventPoint(e);
+  m.style.left = Math.max(4, Math.min(pt.x, window.innerWidth - r.width - 8)) + "px";
+  m.style.top = Math.max(4, Math.min(pt.y, window.innerHeight - r.height - 8)) + "px";
+  if (!e.clientX && !e.clientY) { const first = m.querySelector("[tabindex]"); if (first) first.focus(); }
 }
 function hideExportMenu() { document.getElementById("exportmenu").classList.remove("show"); }
 document.addEventListener("click", hideExportMenu);
@@ -3276,7 +3439,7 @@ function csvCell(v) {
 }
 function exportCsv(date) {
   const watched = catalog.filter(a => statusOf(a.id) !== "unwatched");
-  if (watched.length === 0) { alert("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
+  if (watched.length === 0) { toastError("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
   // 書き出しは視聴コレクションと同じく全年を逆順（秋→冬）で並べる。
   watched.sort((a, b) => b.y - a.y
     || (SEASON_ORDER_DISPLAY[a.s] ?? 9) - (SEASON_ORDER_DISPLAY[b.s] ?? 9)
@@ -3310,7 +3473,7 @@ function importWatch() {
         if (Array.isArray(parsed.history)) { history = parsed.history.filter(e => e && e.id != null && e.t); saveHistory(); }
         render();
         toast("読み込みました");
-      } catch (e) { alert("読み込み失敗: " + e.message); }
+      } catch (e) { toastError("読み込み失敗: " + e.message); }
     };
     reader.readAsText(file);
   };
@@ -3323,7 +3486,7 @@ function importWatch() {
 function exportImage(date) {
   date = date || new Date().toISOString().slice(0, 10);
   const watched = catalog.filter(a => statusOf(a.id) !== "unwatched");
-  if (watched.length === 0) { alert("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
+  if (watched.length === 0) { toastError("マークした作品がありません。先に作品を視聴済/視聴中にしてください。"); return; }
   watched.sort((a, b) => b.y - a.y || (SEASON_ORDER_DISPLAY[a.s] ?? 9) - (SEASON_ORDER_DISPLAY[b.s] ?? 9) || (b.sc || 0) - (a.sc || 0));
 
   const byYear = {};
@@ -3342,37 +3505,37 @@ function exportImage(date) {
   ctx.scale(scale, scale);
   const JP = '"Yu Gothic UI","Meiryo","Hiragino Kaku Gothic ProN",sans-serif';
 
-  ctx.fillStyle = "#0d0e12"; ctx.fillRect(0, 0, W, H);
-  ctx.fillStyle = "#7c5cff"; ctx.fillRect(0, 0, W, 6);
+  ctx.fillStyle = cssVar("--bg"); ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = cssVar("--accent"); ctx.fillRect(0, 0, W, 6);
 
-  ctx.fillStyle = "#e8eaef"; ctx.font = `800 34px ${JP}`;
+  ctx.fillStyle = cssVar("--text"); ctx.font = `800 34px ${JP}`;
   ctx.fillText("アニメ視聴コレクション", pad, 64);
 
   let done = 0, wat = 0;
   for (const id in watch) { const v = (watch[id] || {}).s; if (v === "done") done++; else if (v === "watching") wat++; }
   ctx.font = `700 18px ${JP}`;
-  ctx.fillStyle = "#34d399"; ctx.fillText(`✓ 視聴済 ${done}`, pad, 102);
-  ctx.fillStyle = "#fbbf24"; ctx.fillText(`▶ 視聴中 ${wat}`, pad + 170, 102);
-  ctx.fillStyle = "#5f6675"; ctx.font = `400 14px ${JP}`;
+  ctx.fillStyle = cssVar("--done"); ctx.fillText(`✓ 視聴済 ${done}`, pad, 102);
+  ctx.fillStyle = cssVar("--watching"); ctx.fillText(`▶ 視聴中 ${wat}`, pad + 170, 102);
+  ctx.fillStyle = cssVar("--text-faint"); ctx.font = `400 14px ${JP}`;
   ctx.fillText(`${date} 書き出し ／ 全${watched.length}作品`, pad, 128);
 
   let yy = headerH;
   for (const y of ys) {
-    ctx.fillStyle = "#a48bff"; ctx.font = `800 22px ${JP}`;
+    ctx.fillStyle = cssVar("--accent-soft"); ctx.font = `800 22px ${JP}`;
     ctx.fillText(`${y}年`, pad, yy + 22);
     yy += yearHeadH;
     for (const a of byYear[y]) {
       const st = statusOf(a.id);
-      ctx.fillStyle = st === "done" ? "#34d399" : st === "maybe" ? "#38bdf8" : st === "dropped" ? "#f87171" : st === "planning" ? "#f472b6" : "#fbbf24";
+      ctx.fillStyle = st === "done" ? cssVar("--done") : st === "maybe" ? cssVar("--maybe") : st === "dropped" ? cssVar("--dropped") : st === "planning" ? cssVar("--planning") : cssVar("--watching");
       ctx.font = `700 15px ${JP}`;
       ctx.fillText(st === "done" ? "✓" : st === "maybe" ? "?" : st === "dropped" ? "×" : st === "planning" ? "▷" : "▶", pad, yy + 16);
-      ctx.fillStyle = "#e8eaef"; ctx.font = `400 16px ${JP}`;
+      ctx.fillStyle = cssVar("--text"); ctx.font = `400 16px ${JP}`;
       let title = a.t;
       const maxW = W - pad * 2 - 90;
       while (ctx.measureText(title).width > maxW && title.length > 4) title = title.slice(0, -1);
       if (title !== a.t) title += "…";
       ctx.fillText(title, pad + 26, yy + 16);
-      ctx.fillStyle = "#5f6675"; ctx.font = `400 13px ${JP}`;
+      ctx.fillStyle = cssVar("--text-faint"); ctx.font = `400 13px ${JP}`;
       ctx.textAlign = "right";
       ctx.fillText(`${a.y} ${SEASON_JA[a.s] || a.s}`, W - pad, yy + 16);
       ctx.textAlign = "left";
@@ -3382,7 +3545,7 @@ function exportImage(date) {
   }
 
   canvas.toBlob(b => {
-    if (!b) { alert("画像の生成に失敗しました。"); return; }
+    if (!b) { toastError("画像の生成に失敗しました。"); return; }
     saveFile(b, `anime-collection-${date}.jpg`, "画像を書き出しました");
   }, "image/jpeg", 0.92);
 }
