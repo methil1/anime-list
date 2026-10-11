@@ -7,6 +7,10 @@
 <meta name="description" content="アニメ視聴記録カタログ。クール別に作品を一覧し、ワンクリックで視聴状態を記録。">
 <meta name="theme-color" content="#0d0e12">
 <link rel="manifest" href="./manifest.webmanifest">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<!-- タイトル・統計の数字・年見出しに使う文字だけを読み込む（text= で必要な字形に絞る） -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@800&display=swap&text=%E3%82%A2%E3%83%8B%E3%83%A1%E3%83%A2%EF%BC%810123456789%E5%B9%B4%E4%BB%A3%E6%99%82%E9%96%93%E5%88%86%E6%97%A5">
 <link rel="icon" type="image/png" href="./icons/icon-192.png">
 <link rel="apple-touch-icon" href="./icons/apple-touch-icon.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -23,10 +27,10 @@
     --text: oklch(93.7% 0.007 269);
     --text-dim: oklch(70.5% 0.02 266);
     --text-faint: oklch(51% 0.025 266);
-    --on-accent: oklch(98.5% 0.006 290);   /* 色付きの面に載せる文字 */
+    --on-accent: oklch(98.5% 0.006 195);   /* 色付きの面に載せる文字 */
     /* アクセント */
-    --accent: oklch(59.9% 0.23 286);
-    --accent-soft: oklch(70.9% 0.166 292);
+    --accent: oklch(53% 0.11 195);        /* 青緑。白文字を載せて 4.5:1 以上 */
+    --accent-soft: oklch(80% 0.11 192);   /* 暗い面の上の文字・フォーカス枠用 */
     --accent-tint: color-mix(in oklch, var(--accent) 12%, transparent);   /* 見出しバナーの面 */
     --accent-line: color-mix(in oklch, var(--accent) 34%, transparent);   /* 見出しバナーの縁 */
     /* 視聴状態（明るさをそろえ、彩度を少し落とした独自値） */
@@ -87,6 +91,7 @@
     --z-modal-top: 90;      /* 感想（話数記録の上に重なる。背景 90 / 本体 91） */
     --radius: 12px;
     --radius-sm: 8px;
+    --font-display: "M PLUS Rounded 1c", "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;   /* タイトル・数字・年見出し */
     --font: "Segoe UI", "Hiragino Kaku Gothic ProN", "Noto Sans JP", Meiryo, system-ui, sans-serif;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; }
@@ -170,14 +175,14 @@
   header { padding: 40px 0 18px; }
   .title-row { display: flex; align-items: stretch; justify-content: space-between; gap: 18px 28px; flex-wrap: wrap; }
   .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; display: flex; flex-direction: column; }
-  h1 { font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
+  h1 { font-family: var(--font-display); font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
-  .dev-note { color: var(--accent); font-size: 0.82rem; margin-top: 5px; }
+  .dev-note { color: var(--accent-soft); font-size: 0.82rem; margin-top: 5px; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
 
   .stats { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; }
-  .stat .num { font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
+  .stat .num { font-family: var(--font-display); font-size: 1.75rem; font-weight: 800; letter-spacing: -0.02em; font-variant-numeric: tabular-nums; line-height: 1.15; }
   .stat .lbl { color: var(--text-faint); font-size: 0.74rem; }
   .header-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: auto; padding-top: 14px; }
   .stat.done .num { color: var(--done); }
@@ -312,7 +317,7 @@
   /* 年代別折りたたみ（視聴コレクション） */
   .decade-block { margin-top: 56px; }
   .decade-block:first-child { margin-top: 24px; }
-  .decade-head { display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
+  .decade-head { font-family: var(--font-display); display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;
     font-size: 2.5rem; font-weight: 900; letter-spacing: -0.02em; font-variant-numeric: tabular-nums;
     padding-bottom: 10px; border-bottom: 2px solid var(--accent); margin-bottom: 4px; color: var(--accent-soft); }
   .decade-head-toggle { font-size: 1.1rem; min-width: 1.2em; color: var(--text-faint); }
@@ -336,7 +341,7 @@
 
   /* Section headings */
   .year-block { margin-top: 40px; }
-  .year-head { font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
+  .year-head { font-family: var(--font-display); font-size: 1.9rem; font-weight: 800; letter-spacing: -0.01em; margin-bottom: 6px; font-variant-numeric: tabular-nums; }
   .cour { margin-top: 26px; }
   .cour-head { display: flex; align-items: baseline; gap: 12px; border-bottom: 1px solid var(--border); padding-bottom: 9px; margin-bottom: 16px; cursor: pointer; user-select: none; }
   .cour-head-toggle { font-size: 0.8rem; min-width: 1.1em; color: var(--text-faint); }
@@ -621,7 +626,7 @@
     font-weight: 800; font-size: 13px; width: 22px; height: 22px; border-radius: 50%;
     display: flex; align-items: center; justify-content: center; }
   /* ---------- 開発者モード（裏コマンド） ---------- */
-  .dev-badge { display: none; margin-left: 10px; font-size: 12px; font-weight: 800; vertical-align: middle;
+  .dev-badge { font-family: var(--font); display: none; margin-left: 10px; font-size: 12px; font-weight: 800; vertical-align: middle;
     color: var(--accent-soft); border: 1px solid var(--accent); border-radius: 6px; padding: 2px 8px; }
   body.dev-mode .dev-badge { display: inline-block; }
 </style>
