@@ -285,6 +285,9 @@
   .cal-item:hover { background: var(--bg-elev); }
   .cal-item .t { flex: 0 0 auto; font-size: 0.6rem; font-weight: 700; color: var(--accent-soft); font-variant-numeric: tabular-nums; }
   .cal-item .n { flex: 1 1 auto; min-width: 0; font-size: 0.64rem; color: var(--text); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  /* 自分が視聴中・視聴予定の作品は太字＋状態色で目立たせる */
+  .cal-item.watching .n { font-weight: 700; color: var(--watching); }
+  .cal-item.planning .n { font-weight: 700; color: var(--planning); }
   .cal-empty { color: var(--text-faint); font-size: 0.92rem; text-align: center; padding: 44px 0; }
   @media (max-width: 700px) { .cal-cell { min-height: 80px; } .cal-grid { gap: 3px; } .cal-item .t { display: none; } }
 
@@ -1776,7 +1779,7 @@ function renderCalendar() {
     total += items.length;
     const dow = new Date(Date.UTC(calY, calM, day)).getUTCDay();
     const dcls = day === todayDate ? "" : (dow === 0 ? "sun" : dow === 6 ? "sat" : "");
-    const rows = items.map(s => `<div class="cal-item" onclick="pinInfo(event, ${s.a.id})" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("");
+    const rows = items.map(s => `<div class="cal-item ${["watching", "planning"].includes(statusOf(s.a.id)) ? statusOf(s.a.id) : ""}" onclick="pinInfo(event, ${s.a.id})" onmouseenter="showInfo(event, ${s.a.id})" onmouseleave="hideInfo()"><span class="t">${s.time}</span><span class="n">${esc(s.a.t)}</span></div>`).join("");
     cells += `<div class="cal-cell ${day === todayDate ? "today" : ""}"><div class="cal-date ${dcls}">${day}</div><div class="cal-items">${rows}</div></div>`;
   }
   const cc = currentCour();
