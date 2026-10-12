@@ -290,6 +290,11 @@
   }
   .chip:hover { border-color: var(--border-strong); color: var(--text); }
   .chip:disabled { opacity: .4; cursor: not-allowed; }
+  /* 状態チップ(8個)は縦長レールで2列×4段に揃える。狭い画面(横並びレール)は従来の折り返し */
+  @media (min-width: 901px) {
+    #filters { display: grid; grid-template-columns: 1fr 1fr; }
+    #filters .chip { text-align: center; padding-left: 6px; padding-right: 6px; }
+  }
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .chip.done.active { background: var(--done); border-color: var(--done); color: var(--on-done); }
   .chip.watching.active { background: var(--watching); border-color: var(--watching); color: var(--on-watching); }
