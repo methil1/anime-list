@@ -292,15 +292,14 @@
   .chip:disabled { opacity: .4; cursor: not-allowed; }
   /* 縦長レールではチップ・年ボタンをレール幅のグリッドに揃える。狭い画面(横並びレール)は従来の折り返し。
      状態(8個)=2列×4段、形式(5個)=「すべて」を1段＋2列×2段、
-     年=「◯◯年代すべて」を1段＋3列。最終段の端数は広げて埋める（6分割グリッドで span を変える） */
+     年=「◯◯年代」を1段＋2列（年ボタンは少し低く・小さめの文字。端数は同じ大きさのまま左詰め） */
   @media (min-width: 901px) {
     #filters, #formatfilters { display: grid; grid-template-columns: 1fr 1fr; }
     #formatfilters .chip[data-ff="all"] { grid-column: 1 / -1; }
     #filters .chip, #formatfilters .chip { text-align: center; padding-left: 6px; padding-right: 6px; }
-    .rail-dec-years { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; padding-left: 0; }
-    .rail-dec-years .ytab { grid-column: span 2; }
-    .rail-dec-years .ytab.dec-all, .rail-dec-years .ytab.span-full { grid-column: 1 / -1; }
-    .rail-dec-years .ytab.span-half { grid-column: span 3; }
+    .rail-dec-years { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 7px; padding-left: 0; }
+    .rail-dec-years .ytab:not(.dec-all) { padding-top: 4px; padding-bottom: 4px; font-size: 0.76rem; }
+    .rail-dec-years .ytab.dec-all { grid-column: 1 / -1; }
     .rail-dec-years .ytab { text-align: center; padding-left: 4px; padding-right: 4px; }
   }
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
@@ -1228,10 +1227,7 @@ function init() {
   catalog = cat.anime;
   applyDevMode();   // 開発者モードの永続状態を body クラスへ反映
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
-  // デフォルトは現クールの年。未来クール（先行登録された翌年作品など）が最新年でも
-  // それを既定にせず、現クール年があればそれを、無ければ未来でない最新年を選ぶ。
-  const ccYear = currentCour().year;
-  view.year = years.includes(ccYear) ? ccYear : (years.find(y => y <= ccYear) ?? years[0]);
+  view.year = defaultYear();   // デフォルトは現クールの年（defaultYear 参照）
   // 別タブで #compare を開いた場合は比較ビューで起動（比較データ読込済みのときのみ）。
   if (location.hash === "#compare" && compare) view = { mode: "compare", year: null };
   document.getElementById("src-note").textContent =
@@ -1282,12 +1278,10 @@ function yearbarHtml() {
   return decs.map(d => {
     const folded = railFoldedDecades.has(d);
     const yrs = byDec[d].slice().sort((a, b) => b - a);
-    const rest = yrs.length % 3;   // 3列で割り切れない最終段は広げて埋める
-    const btns = yrs.map((y, i) => {
-      const fill = i >= yrs.length - rest ? (rest === 1 ? " span-full" : " span-half") : "";
-      return `<button class="ytab${fill} ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`;
-    }).join("");
-    const allBtn = `<button class="ytab dec-all ${view.mode === "decade" && view.year === d ? "active" : ""}" onclick="goDecade(${d})">${d}年代すべて</button>`;
+    const btns = yrs.map(y =>
+      `<button class="ytab ${view.mode === "year" && view.year === y ? "active" : ""}" onclick="goYear(${y})">${y}</button>`
+    ).join("");
+    const allBtn = `<button class="ytab dec-all ${view.mode === "decade" && view.year === d ? "active" : ""}" onclick="goDecade(${d})">${d}年代</button>`;
     return `<div class="rail-dec ${folded ? "folded" : ""}" id="raildec-${d}">
       <button class="rail-dec-head" onclick="toggleRailDec(${d})"><span class="rail-dec-tog">${folded ? "▶" : "▼"}</span>${d}年代</button>
       <div class="rail-dec-years">${allBtn}${btns}</div>
@@ -1318,8 +1312,18 @@ function renderYearbar() {
   const b9 = document.getElementById("best9-btn");
   if (b9) b9.classList.toggle("active", view.mode === "best9");
 }
-// 年代まとめ表示（view.year に年代の先頭年を入れる。スクロール記憶キーは "decade:2010"）
-function goDecade(d) { navigate(() => { view = { mode: "decade", year: d }; query = ""; document.getElementById("search").value = ""; }); }
+// 起動時の既定の年。未来クール（先行登録された翌年作品など）が最新年でも
+// それを既定にせず、現クール年があればそれを、無ければ未来でない最新年を選ぶ。
+function defaultYear() {
+  const ccYear = currentCour().year;
+  return years.includes(ccYear) ? ccYear : (years.find(y => y <= ccYear) ?? years[0]);
+}
+// 年代まとめ表示（view.year に年代の先頭年を入れる。スクロール記憶キーは "decade:2010"）。
+// 表示中の年代ボタンをもう一度押すと既定の表示（起動時の年）に戻る。
+function goDecade(d) {
+  if (view.mode === "decade" && view.year === d && !query) { goYear(defaultYear()); return; }
+  navigate(() => { view = { mode: "decade", year: d }; query = ""; document.getElementById("search").value = ""; });
+}
 function goYear(y) { navigate(() => { view = { mode: "year", year: y }; query = ""; document.getElementById("search").value = ""; }); }
 function goCollection() { navigate(() => { view = { mode: "collection", year: null }; collectionSort = "season"; query = ""; document.getElementById("search").value = ""; }); }
 // マイページ内の並び替え（クール別 / 自己評価順）。視聴済みリストは同一なので同じビュー内で切替。
