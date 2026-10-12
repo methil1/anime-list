@@ -266,7 +266,7 @@
   .cal-ics-menu { display: none; position: absolute; right: 0; top: calc(100% + 6px); z-index: 2; flex-direction: column; gap: 6px;
     padding: 8px; background: var(--bg-elev); border: 1px solid var(--border-strong); border-radius: 12px; box-shadow: var(--shadow-md); white-space: nowrap; }
   .cal-ics-menu.open { display: flex; }
-  .cal-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; }
+  .cal-grid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 6px; }   /* minmax(0) で長い作品名に列幅を押し広げさせない */
   .cal-dow { text-align: center; font-size: 0.74rem; font-weight: 700; color: var(--text-faint); padding-bottom: 2px; }
   .cal-dow.sun { color: var(--dropped); }
   .cal-dow.sat { color: var(--maybe); }
