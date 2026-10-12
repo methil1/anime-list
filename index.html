@@ -289,6 +289,7 @@
     transition: color var(--dur-fast) var(--ease-out), background-color var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out); white-space: nowrap;
   }
   .chip:hover { border-color: var(--border-strong); color: var(--text); }
+  .chip:disabled { opacity: .4; cursor: not-allowed; }
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .chip.done.active { background: var(--done); border-color: var(--done); color: var(--on-done); }
   .chip.watching.active { background: var(--watching); border-color: var(--watching); color: var(--on-watching); }
@@ -1424,8 +1425,15 @@ function setFilter(f) {
 }
 function toggleUnrated() {
   unratedOnly = !unratedOnly;
-  document.getElementById("unrated-chip").classList.toggle("active", unratedOnly);
   render();
+}
+// 自己評価順は未評価グループを常に含めるため、「未評価」トグルを無効化して OFF 表示にする（設定値は保持）。
+function unratedIgnored() { return view.mode === "collection" && collectionSort === "rating" && !query; }
+function syncUnratedChip() {
+  const chip = document.getElementById("unrated-chip");
+  const ignored = unratedIgnored();
+  chip.disabled = ignored;
+  chip.classList.toggle("active", unratedOnly && !ignored);
 }
 function setFormat(f) {
   toggleFilterSet(formatFilter, FORMAT_KEYS, f);
@@ -1527,8 +1535,9 @@ function onSearch() {
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
   if (!formatFilter.has(a.f)) return false;
-  if (unratedOnly && ratingOf(a.id) > 0) return false;
-  if (unratedOnly && statusFilter.size === 0) return true;   // 状態を何も選ばず「未評価」だけ ON → 状態は問わない
+  const unrated = unratedOnly && !unratedIgnored();
+  if (unrated && ratingOf(a.id) > 0) return false;
+  if (unrated && statusFilter.size === 0) return true;   // 状態を何も選ばず「未評価」だけ ON → 状態は問わない
   return statusFilter.has(statusOf(a.id));
 }
 
@@ -2037,6 +2046,7 @@ async function exportBest9() {
 
 /* ---------- main render ---------- */
 function render() {
+  syncUnratedChip();
   renderStats();
   renderContextPanel();
   const list = document.getElementById("list");
