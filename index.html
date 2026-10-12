@@ -177,6 +177,9 @@
   .title-block { flex: 0 1 360px; min-width: 240px; max-width: 460px; display: flex; flex-direction: column; }
   h1 { font-family: var(--font-display); font-size: clamp(1.6rem, 1.1rem + 2vw, 2.5rem); font-weight: 800; letter-spacing: -0.02em; line-height: 1.05; }
   .subtitle { color: var(--text-dim); margin-top: 6px; font-size: 0.92rem; }
+  .howto { list-style: none; padding: 0; font-size: 0.82rem; line-height: 1.5; }
+  .howto li + li { margin-top: 3px; }
+  .howto b { color: var(--text); font-weight: 700; }
   .dev-note { color: var(--accent-soft); font-size: 0.82rem; margin-top: 5px; }
   .src-note { color: var(--text-faint); font-size: 0.76rem; margin-top: 4px; }
   /* バージョン表記とパッチノート（changelog.js を build_changelog.py が git log から生成） */
@@ -739,7 +742,12 @@
         <div class="title-block">
           <h1>アニメモ！<span class="dev-badge">DEV</span><span class="app-ver" id="app-ver"></span></h1>
           <div class="patch-notes" id="patch-notes" tabindex="0" aria-label="パッチノート"></div>
-          <p class="subtitle">左クリックで視聴済／多分視聴済／未マークを切替。右クリックで全ステータス（視聴中・視聴中止の話数）と自分の評価（★1-5）を設定できます。</p>
+          <ul class="subtitle howto">
+            <li><b>左クリック</b>：視聴済 → 多分視聴済 → 未マークを切替</li>
+            <li><b>右クリック</b>：視聴中・視聴予定などの状態、自己評価（★1-5）、話数の記録、感想、Wikipedia・公式サイト・配信への移動</li>
+            <li><b>カーソルを合わせる</b>：原作・制作会社・キャラ（CV）・放送日を表示</li>
+            <li><b>左の欄</b>：状態・形式で絞り込み、年・年代へ移動。マイページで視聴記録を一覧（クール別／自己評価順）</li>
+          </ul>
           <p class="dev-note">※おすすめ機能は現在開発中です。</p>
           <p class="src-note" id="src-note"></p>
           <div class="stats" id="stats"></div>
