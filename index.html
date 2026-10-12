@@ -602,6 +602,9 @@
   /* ホバー情報カード（作品名/原作/制作/メインキャラ） */
   .info-card { position: fixed; z-index: var(--z-popover); min-width: 200px; max-width: 300px; background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 11px 13px; display: none; pointer-events: none; }
   .info-card.show { display: block; }
+  /* data-tip を持つ要素のホバー補足（マウスカーソルの右上に追従） */
+  .hover-tip { position: fixed; z-index: var(--z-popover); background: var(--bg-card); border: 1px solid var(--border-strong); border-radius: var(--radius-sm); box-shadow: var(--shadow-lg); padding: 6px 10px; font-size: 0.8rem; color: var(--text); white-space: nowrap; display: none; pointer-events: none; }
+  .hover-tip.show { display: block; }
   .info-card .ic-title { font-size: 0.9rem; font-weight: 600; color: var(--text); line-height: 1.35; margin-bottom: 7px; }
   .info-card .ic-row { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 3px; display: flex; gap: 7px; }
   .info-card .ic-k { flex: 0 0 auto; color: var(--text-faint); }
@@ -674,7 +677,7 @@
   <aside class="rail" id="rail">
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索…" oninput="onSearch()">
+      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索…" data-tip="作品名・制作会社・声優・原作者で検索できます" oninput="onSearch()">
     </div>
 
     <nav class="rail-views">
@@ -753,6 +756,7 @@
 <div class="ctx-menu" id="ctxmenu"></div>
 <div class="ctx-menu" id="exportmenu"></div>
 <div class="info-card" id="infocard"></div>
+<div class="hover-tip" id="hovertip"></div>
 <div class="cal-overlay" id="cal-overlay" onclick="if(event.target===this)closeCalendar()"></div>
 <div class="ep-overlay" id="epoverlay" onclick="closeEpModal()"></div>
 <div class="ep-modal" id="epmodal" role="dialog" aria-modal="true"></div>
@@ -3139,6 +3143,20 @@ function positionInfo(poster, card) {
   card.style.left = left + "px";
   card.style.top = top + "px";
 }
+// data-tip のホバー補足: カーソルの右上に表示し、画面端ではみ出さないよう寄せる。
+// 入力欄は空のとき（プレースホルダが見えているとき）だけ出す。
+function placeHoverTip(e) {
+  const el = e.target.closest && e.target.closest("[data-tip]");
+  const tip = document.getElementById("hovertip");
+  if (!el || (el.tagName === "INPUT" && el.value)) { tip.classList.remove("show"); return; }
+  tip.textContent = el.dataset.tip;
+  tip.classList.add("show");
+  const w = tip.offsetWidth, h = tip.offsetHeight, gap = 12;
+  tip.style.left = Math.max(4, Math.min(e.clientX + gap, innerWidth - w - 4)) + "px";
+  tip.style.top = Math.max(4, e.clientY - h - gap) + "px";
+}
+document.addEventListener("mousemove", placeHoverTip);
+document.addEventListener("input", () => document.getElementById("hovertip").classList.remove("show"));
 function hideInfo() {
   if (infoPinned) return;   // ピン留め中は mouseleave で閉じない（外側タップ/再タップで閉じる）
   document.getElementById("infocard").classList.remove("show");
