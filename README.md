@@ -41,6 +41,11 @@
 | `anime-data.js` | `window.ANIME_CATALOG` への代入。CORS 回避のため `.json` ではなく `.js`。 |
 | `scrape_anime.py` | AniList GraphQL から取得し `anime-data.js` を生成するスクレイパー。 |
 | `auto_update.bat` | 自動更新タスクが叩くバッチ（`--update` → git commit → push）。 |
+| `build_changelog.py` | git log から `changelog.js`（パッチノート）を生成。対象は feat/fix/style/perf のみ、開発者モード関連は除外。バージョンは feat で v1.**x**.0、それ以外で v1.x.**y** と自動採番。 |
+| `changelog.js` | `window.CHANGELOG` への代入（自動生成・手編集しない）。タイトル横のバージョンとパッチノート欄に使う。 |
+
+パッチノートは post-commit フック（`.git/hooks/post-commit`、Git 管理外）がコミットのたびに `build_changelog.py` を実行し、
+変化があればそのコミットに amend で含める。別の環境で clone した場合はフックを置き直すか、手動で `python build_changelog.py` を実行する。
 
 ローカルで見るには `index.html` をブラウザで直接開くだけです（`file://` で動作）。
 

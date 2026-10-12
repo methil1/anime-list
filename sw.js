@@ -1,11 +1,12 @@
 /* アニメモ！ Service Worker — オフライン起動（ネットワーク優先）とポスター画像キャッシュ */
-const CORE_CACHE = "animemo-core-v4";
+const CORE_CACHE = "animemo-core-v5";
 const IMG_CACHE = "animemo-img-v1";
 // 中核アセット（オフラインでも起動できるよう install 時にプリキャッシュ）
 const CORE = [
   "./",
   "./index.html",
   "./anime-data.js",
+  "./changelog.js",
   "./manifest.webmanifest",
   "./icons/icon-192.png",
   "./icons/icon-512.png",
