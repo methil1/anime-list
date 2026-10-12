@@ -683,6 +683,7 @@
         <button class="chip dropped" data-f="dropped" onclick="setFilter('dropped')">視聴中止</button>
         <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
         <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
+        <button class="chip" id="unrated-chip" onclick="toggleUnrated()" title="評価（★）が未設定の作品だけに絞る。状態チップと組み合わせて使う">未評価</button>
       </div>
     </div>
 
@@ -797,6 +798,7 @@ let collectionSort = "season";   // 視聴コレクション内の並び: "seaso
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
 let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
+let unratedOnly = false;   // 「未評価」トグル: 状態フィルタと AND で、自己評価(★)未設定の作品だけに絞る
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 let collapsedDecades = new Set(); // 折りたたみ中の年代（collection モード用、キー=10年区切りの開始年）
 let collapsedYears = new Set();   // 折りたたみ中の年（collection モード用）
@@ -1410,6 +1412,7 @@ function toggleFilterSet(set, keys, value) {
 function syncChips(containerId, attr, set, keys) {
   document.querySelectorAll(`#${containerId} .chip`).forEach(c => {
     const v = c.dataset[attr];
+    if (v === undefined) return;   // 状態以外のトグル（未評価）は対象外
     const active = v === "all" ? set.size === keys.length : set.has(v);
     c.classList.toggle("active", active);
   });
@@ -1417,6 +1420,11 @@ function syncChips(containerId, attr, set, keys) {
 function setFilter(f) {
   toggleFilterSet(statusFilter, STATUS_KEYS, f);
   syncChips("filters", "f", statusFilter, STATUS_KEYS);
+  render();
+}
+function toggleUnrated() {
+  unratedOnly = !unratedOnly;
+  document.getElementById("unrated-chip").classList.toggle("active", unratedOnly);
   render();
 }
 function setFormat(f) {
@@ -1519,6 +1527,7 @@ function onSearch() {
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
   if (!formatFilter.has(a.f)) return false;
+  if (unratedOnly && ratingOf(a.id) > 0) return false;
   return statusFilter.has(statusOf(a.id));
 }
 
