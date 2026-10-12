@@ -1528,6 +1528,7 @@ function onSearch() {
 function passStatus(a) {
   if (!formatFilter.has(a.f)) return false;
   if (unratedOnly && ratingOf(a.id) > 0) return false;
+  if (unratedOnly && statusFilter.size === 0) return true;   // 状態を何も選ばず「未評価」だけ ON → 状態は問わない
   return statusFilter.has(statusOf(a.id));
 }
 
@@ -2118,8 +2119,8 @@ function yearBlockHtml(y, yearItems, isCollection, prefix = "") {
   </div>`;
 }
 
-// 視聴コレクション「評価順」: 自己評価(1-5)を付けた作品を ★5→★1 の順に並べ、
-// 各評価内では放送が古い順（クール別には分けない）。
+// 視聴コレクション「評価順」: 自己評価(1-5)を付けた作品を ★5→★1 の順に並べ、最後に「未評価」
+// （視聴予定・未マークを除く、★未設定の作品）を置く。各評価内では放送が古い順（クール別には分けない）。
 // 自己評価ページ用: 年代だけで分割し、各年代内は古い順（年→クール階層なし、見出しは控えめ）。
 function ratingDecadeHtml(arr, r) {
   const byDec = {};
@@ -2136,14 +2137,14 @@ function ratingDecadeHtml(arr, r) {
   }).join("");
 }
 function renderCollectionByRating(list) {
-  const items = catalog.filter(a => ratingOf(a.id) > 0 && passStatus(a));
+  const items = catalog.filter(a => passStatus(a) && (ratingOf(a.id) > 0 || !["unwatched", "planning"].includes(statusOf(a.id))));
   if (items.length === 0) {
-    list.innerHTML = collectionSortBar() + `<div class="notice"><div class="big">★</div><p>1〜5点の評価を付けた作品がまだありません。ポスターを右クリックして評価を設定できます。</p></div>`;
+    list.innerHTML = collectionSortBar() + `<div class="notice"><div class="big">★</div><p>該当する作品がありません。ポスターを右クリックして評価を設定できます。</p></div>`;
     return;
   }
   const byRating = {};
   for (const a of items) (byRating[ratingOf(a.id)] = byRating[ratingOf(a.id)] || []).push(a);
-  const html = [5, 4, 3, 2, 1].filter(r => byRating[r]).map(r => {
+  const html = [5, 4, 3, 2, 1, 0].filter(r => byRating[r]).map(r => {
     const arr = byRating[r];
     const countText = countBreakdown(arr);
     const key = `rate-${r}`;
@@ -2152,7 +2153,7 @@ function renderCollectionByRating(list) {
     return `<section class="cour ${collapsed ? "collapsed" : ""}" id="cour-${key}">
       <div class="cour-head s-recent" onclick="toggleCour('${key}')">
         <span class="cour-head-toggle">${collapsed ? "▶" : "▼"}</span>
-        <span class="season">自己評価 ${"★".repeat(r)}（${r}点）</span>
+        <span class="season">${r ? `自己評価 ${"★".repeat(r)}（${r}点）` : "未評価"}</span>
         <span class="count">${countText}</span>
         <span class="line"></span>
       </div>
