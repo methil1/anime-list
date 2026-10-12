@@ -290,10 +290,14 @@
   }
   .chip:hover { border-color: var(--border-strong); color: var(--text); }
   .chip:disabled { opacity: .4; cursor: not-allowed; }
-  /* 状態チップ(8個)は縦長レールで2列×4段に揃える。狭い画面(横並びレール)は従来の折り返し */
+  /* 縦長レールではチップ・年ボタンをレール幅のグリッドに揃える。狭い画面(横並びレール)は従来の折り返し。
+     状態(8個)=2列×4段、形式(5個)=「すべて」を1段＋2列×2段、年=3列 */
   @media (min-width: 901px) {
-    #filters { display: grid; grid-template-columns: 1fr 1fr; }
-    #filters .chip { text-align: center; padding-left: 6px; padding-right: 6px; }
+    #filters, #formatfilters { display: grid; grid-template-columns: 1fr 1fr; }
+    #formatfilters .chip[data-ff="all"] { grid-column: 1 / -1; }
+    #filters .chip, #formatfilters .chip { text-align: center; padding-left: 6px; padding-right: 6px; }
+    .rail-dec-years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; padding-left: 0; }
+    .rail-dec-years .ytab { text-align: center; padding-left: 4px; padding-right: 4px; }
   }
   .chip.active { background: var(--accent); border-color: var(--accent); color: var(--on-accent); }
   .chip.done.active { background: var(--done); border-color: var(--done); color: var(--on-done); }
