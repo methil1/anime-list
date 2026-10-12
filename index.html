@@ -2672,22 +2672,38 @@ function posterHtml(a, continuing) {
 }
 
 /* ---------- marking ---------- */
+// 左クリックで「視聴済」にしたときにタイムラインへ入った記録（作品ID → 履歴エントリの配列）。
+// 続けて左クリックで別の状態へ戻したら、その記録をタイムラインから取り除く（誤クリック対策。ページ内のみ保持）。
+const leftClickHistory = new Map();
 function cycle(id) {
   const cur = statusOf(id);
   let next;
+  let undone = false;
   if (cur === "watching" || cur === "dropped") {
     // 話数を入れた視聴中/視聴中止は、誤クリックでも話数を失わないよう両者のトグルだけにする。
     next = cur === "watching" ? "dropped" : "watching";
     setStatus(id, next, epOf(id));
   } else {
     next = LEFT_NEXT[cur] || "done";   // 未マーク/視聴済/多分視聴済/視聴予定 → 3状態巡回
+    const before = history.length;
     setStatus(id, next, null);
+    if (next === "done") {
+      const added = history.slice(0, history.length - before);   // pushHistory は先頭へ追加する
+      if (added.length) leftClickHistory.set(id, added);
+    } else if (leftClickHistory.has(id)) {
+      const added = new Set(leftClickHistory.get(id));
+      leftClickHistory.delete(id);
+      const kept = history.filter(e => !added.has(e));
+      undone = kept.length !== history.length;
+      if (undone) { history = kept; saveHistory(); }
+    }
   }
   renderStats();
   // 視聴コレクション表示中も、未視聴に戻した作品はその場では消さずポスターのみ更新（誤クリック対策）。
   // 次回のページ偏移（年タブ/コレクション/検索など）で再描画され、自然に除外される。
   updatePoster(id);
-  toast(STATUS_JA[next] + " にしました");
+  toast(STATUS_JA[next] + " にしました" + (undone ? "（タイムラインの記録も取り消しました）" : ""));
+  if (undone && view.mode === "timeline" && !query) render();
 }
 /* ---------- 右クリックメニュー ---------- */
 let ctxOpenedAt = 0;
