@@ -195,6 +195,8 @@
   .pn-row.feat .pn-t { color: var(--accent-soft); }
   .pn-row:not(.feat) { display: none; }                  /* 修正・見た目などは開発者モードだけで表示 */
   body.dev-mode .pn-row:not(.feat) { display: flex; }
+  /* おすすめは評価軸が固まるまで開発者モード限定（ボタン・開発中の注記・パッチノートの該当行） */
+  body:not(.dev-mode) #reco-btn, body:not(.dev-mode) .dev-note, body:not(.dev-mode) .pn-row.dev-only { display: none; }
 
   .stats { display: flex; gap: 22px; margin-top: 18px; flex-wrap: wrap; }
   .stat { display: flex; flex-direction: column; }
@@ -1563,6 +1565,8 @@ function toggleDevMode() {
   try { localStorage.setItem(DEV_KEY, devMode ? "1" : "0"); } catch (e) {}
   applyDevMode();
   toast(devMode ? "開発者モード ON" : "開発者モード OFF");
+  // おすすめ（見たいシリーズ含む）は開発者モード限定。OFF にしたときに表示中なら既定の年へ戻す
+  if (!devMode && (view.mode === "reco" || view.mode === "series")) { goYear(defaultYear()); return; }
   render();   // 将来ゲート対象のUIが増えたとき即座に反映されるよう再描画
 }
 
@@ -3650,7 +3654,7 @@ init();
     if (!log.length) return;
     document.getElementById("app-ver").textContent = `v${log[0].v}`;
     document.getElementById("patch-notes").innerHTML = log.map(e =>
-      `<div class="pn-row ${e.t === "新機能" ? "feat" : ""}" ><span class="pn-v">v${esc(e.v)}<span class="pn-d">${esc(e.d.replace(/-/g, "/"))}</span></span><span class="pn-t">${esc(e.t)}</span><span>${esc(e.s)}</span></div>`
+      `<div class="pn-row ${e.t === "新機能" ? "feat" : ""} ${e.dev ? "dev-only" : ""}" ><span class="pn-v">v${esc(e.v)}<span class="pn-d">${esc(e.d.replace(/-/g, "/"))}</span></span><span class="pn-t">${esc(e.t)}</span><span>${esc(e.s)}</span></div>`
     ).join("");
   })();
 </script>
