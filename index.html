@@ -775,7 +775,7 @@
           <h1>アニメモ！<span class="dev-badge">DEV</span><span class="app-ver" id="app-ver"></span></h1>
           <div class="patch-notes" id="patch-notes" tabindex="0" aria-label="パッチノート"></div>
           <ul class="subtitle howto">
-            <li><b>左クリック</b>：視聴済 → 多分視聴済 → 未マークを切替</li>
+            <li><b>左クリック</b>：視聴済 → 多分視聴済 → 未マークを切替（放送中・放送前の作品は視聴済にならない）</li>
             <li><b>右クリック</b>：視聴中・視聴予定などの状態、自己評価（★1-5）、話数の記録、感想、Wikipedia・公式サイト・配信への移動</li>
             <li><b>カーソルを合わせる</b>：原作・制作会社・キャラ（CV）・放送日を表示</li>
             <li><b>サイドバー</b>：状態・形式で絞り込み、年・年代へ移動。マイページで視聴記録を一覧（クール別／自己評価順）</li>
@@ -2817,6 +2817,12 @@ function cycle(id) {
     setStatus(id, next, epOf(id));
   } else {
     next = LEFT_NEXT[cur] || "done";   // 未マーク/視聴済/多分視聴済/視聴予定 → 3状態巡回
+    // 放送中・放送前の作品は見終わっていないはずなので、左クリックの誤操作で視聴済にしない（右クリックからは変更できる）
+    const as = next === "done" ? airStatus(catalog.find(x => x.id === id)) : null;
+    if (as === "airing" || as === "upcoming") {
+      toast(`${as === "airing" ? "放送中" : "放送前"}の作品は左クリックで視聴済にできません。右クリックから変更できます`, { ms: 3000 });
+      return;
+    }
     const before = history.length;
     setStatus(id, next, null);
     if (next === "done") {
