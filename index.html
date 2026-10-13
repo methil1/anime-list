@@ -116,6 +116,10 @@
       var(--bg);
     color: var(--text);
     min-height: 100vh;
+    /* 日本語を文節の切れ目で折り返し（「移／動」のような語の途中の改行を防ぐ）、最終行に1〜2文字だけ残る折り返しも避ける。
+       非対応ブラウザでは従来どおりの折り返しになるだけ */
+    word-break: auto-phrase;
+    text-wrap: pretty;
     line-height: 1.5;
     -webkit-font-smoothing: antialiased;
   }
@@ -429,6 +433,10 @@
     background: linear-gradient(transparent, var(--scrim-strong)55%);
   }
   .poster .ttl { font-size: 0.82rem; font-weight: 700; line-height: 1.25; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+  /* 作品名の改行位置は fitTitles が選ぶ（.split = 選んだ位置に <br> を入れた状態）。
+     選べなかった作品名は文節区切りにせず従来の詰めた折り返し（見える文字数を減らさない） */
+  .poster .ttl { word-break: normal; }
+  .poster .ttl.split { white-space: nowrap; }
   .poster .sub { font-size: 0.68rem; color: var(--text-dim); margin-top: 3px; display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
   .poster .ep { font-variant-numeric: tabular-nums; }
   .poster .multi { background: var(--accent); color: var(--on-accent); font-weight: 700; padding: 1px 6px; border-radius: 999px; font-size: 0.64rem; }
@@ -1264,6 +1272,7 @@ function init() {
     return;
   }
   catalog = cat.anime;
+  initTitleFit();   // 最初の描画より前に作品名の折り返し判定を仕掛ける
   applyDevMode();   // 開発者モードの永続状態を body クラスへ反映
   years = [...new Set(catalog.map(a => a.y))].sort((a, b) => b - a);
   view.year = defaultYear();   // デフォルトは現クールの年（defaultYear 参照）
@@ -1291,6 +1300,114 @@ function syncYearbars() {
   };
   top.addEventListener("scroll", () => sync(top, bottom));
   bottom.addEventListener("scroll", () => sync(bottom, top));
+}
+
+/* ---------- poster title wrapping ----------
+   作品名（最大2行）は、改行を入れる1か所を「人が読んで自然な位置」から選ぶ。
+   優先: スペース・句読点・括弧/ダッシュ > 文字種の切れ目（漢字↔カタカナ・ひらがな→漢字 など） > 中黒 > 単語の切れ目。
+   どの候補でも2行に収まらない作品名は何もしない（従来の詰めた折り返しのまま。見える文字数を減らさない）。
+   描画箇所が多いので #list への追加を MutationObserver で拾い、画面に近づいたものから判定する（閉じたクールは開いたときに判定）。 */
+const TITLE_SEG = typeof Intl !== "undefined" && Intl.Segmenter ? new Intl.Segmenter("ja", { granularity: "word" }) : null;
+const titleCanvas = document.createElement("canvas").getContext("2d");
+function charKind(c) {
+  if (/\s/.test(c)) return "s";
+  if (/[0-9０-９Ⅰ-ⅿ]/.test(c)) return "d";
+  if (/[A-Za-zＡ-Ｚａ-ｚ]/.test(c)) return "l";
+  if (/[ぁ-ゟ]/.test(c)) return "h";
+  if (/[ァ-ヿㇰ-ㇿ]/.test(c)) return "k";
+  if (/[一-鿿㐀-䶿々〆ヶ]/.test(c)) return "j";
+  return "p";
+}
+const NO_LINE_START = "、。，．・：；！？!?）)」』】］]〉》ーァィゥェォッャュョヮヵヶぁぃぅぇぉっゃゅょゎ";
+const OPENERS = "（(「『【［[〈《", CLOSERS = "）)」』】］]〉》", DASHES = "-－‐–—～〜~";
+const PARTICLE_START = "のがをにはへとでもやなだっ";   // カタカナ等の直後でも、ここから始まるひらがなの前では切らない
+// 位置 i（s[i] の前）で改行したときの自然さ。0 は候補にしない
+function breakScore(s, i, seg) {
+  const a = s[i - 1], b = s[i];
+  if (/\s/.test(b) || NO_LINE_START.includes(b) || CLOSERS.includes(b)) return 0;
+  if (bracketDepth(s, i) > 0) return 0;   // 「【リボ / 払い】」「～Second / Season～」のような括弧・副題の中では切らない
+  if (DASHES.includes(a) && charKind(s[i - 2] ?? "") === "l" && charKind(b) === "l") return 0;   // 「PSYCHO-PASS」のような英単語の中のハイフン
+  if (/\s/.test(a)) return charKind(s[i - 2] ?? "") === "l" && charKind(b) === "l" ? 6 : 10;   // 英単語どうしの間は副題の区切りより弱く
+  if ("、。，！？!?".includes(a) || CLOSERS.includes(a)) return 9;
+  if (OPENERS.includes(a)) return 0;
+  if (OPENERS.includes(b)) return 9;
+  // 同じダッシュが後ろにもう一度ある最初のもの＝副題の開き（「TANK CHAIR / -戦車椅子-」）。開きは前で、単独・閉じは後で切る
+  const isOpenDash = j => s.indexOf(s[j]) === j && s.lastIndexOf(s[j]) > j;
+  if (DASHES.includes(b)) return isOpenDash(i) ? 9 : 0;
+  if (DASHES.includes(a)) return isOpenDash(i - 1) ? 0 : 9;
+  if (a === "・") return 5;
+  const ka = charKind(a), kb = charKind(b);
+  if (ka !== kb && seg.size && !seg.has(i)) return 0;   // 文字種の切れ目でも、辞書で1語なら切らない（「成り / 上がり」）
+  if (ka === "d" || kb === "d" || ka === "p" || kb === "p") return 0;   // 「第3期」「Season2」「★」まわりは切らない
+  if (kb === "h") return ka === "k" || ka === "l" ? (PARTICLE_START.includes(b) ? 0 : 6) : 0;   // 送り仮名・助詞の前は切らない
+  if (ka === "h" && kb === "j" && runLen(s, i - 1, -1) === 1 && charKind(s[i - 2] ?? "") === "j" && !PARTICLE_START.includes(a)) return 0;   // 「成り / 上がり」のような送り仮名1文字
+  if (ka === "h") return 7;   // ひらがな → 漢字・カタカナ・英字（文節の頭）
+  if (ka !== kb) return runLen(s, i - 1, -1) >= 2 && runLen(s, i, 1) >= 2 ? 7 : 0;   // 漢字↔カタカナ↔英字（「子 / ザメ」のような1文字の境目は除く）
+  if (ka === "l") return 0;   // 英単語の途中
+  // 同じ文字種の中は単語の切れ目だけ。辞書は短い断片を作りがちなので、両側の断片が十分長いときだけ採用
+  const piece = seg.get(i);
+  const min = ka === "k" ? 3 : 2;
+  return piece && piece[0] >= min && piece[1] >= min ? 4 : 0;
+}
+function bracketDepth(s, i) {   // s[i] の前の位置が括弧（同じダッシュで挟んだ副題も含む）の何重目の中か
+  let d = 0;
+  for (let j = 0; j < i; j++) {
+    const c = s[j];
+    if (OPENERS.includes(c)) d++;
+    else if (CLOSERS.includes(c) && d > 0) d--;
+    else if (DASHES.includes(c) && s.indexOf(c) !== s.lastIndexOf(c)) d += s.indexOf(c) === j ? 1 : (s.lastIndexOf(c) === j ? -1 : 0);
+  }
+  return Math.max(d, 0);
+}
+function runLen(s, j, dir) {   // s[j] から dir 方向に続く同じ文字種の長さ
+  const k = charKind(s[j]); let n = 0;
+  for (; j >= 0 && j < s.length && charKind(s[j]) === k; j += dir) n++;
+  return n;
+}
+function splitTitle(el) {
+  const s = el.dataset.full ?? el.textContent, w = el.getBoundingClientRect().width - 1;
+  if (!w || !s) return;
+  const cs = getComputedStyle(el);
+  titleCanvas.font = `${cs.fontWeight} ${cs.fontSize} ${cs.fontFamily}`;
+  const width = t => titleCanvas.measureText(t).width;
+  if (width(s) <= w) return;   // 1行に収まる
+  const seg = new Map();   // 単語の切れ目の位置 → [左の断片の長さ, 右の断片の長さ]
+  if (TITLE_SEG) {
+    const parts = [...TITLE_SEG.segment(s)];
+    for (let k = 1; k < parts.length; k++) seg.set(parts[k].index, [parts[k - 1].segment.length, parts[k].segment.length]);
+  }
+  let best = null;
+  for (let i = 1; i < s.length; i++) {
+    const sc = breakScore(s, i, seg);
+    if (!sc || (best && sc < best.sc)) continue;
+    const l1 = s.slice(0, i).trimEnd(), l2 = s.slice(i).trimStart();
+    const w1 = width(l1), w2 = width(l2);
+    if (w1 > w || w2 > w) continue;
+    const gap = Math.abs(w1 - w2);   // 同点なら2行の長さが均等な方（「妃教育から / 逃げたい私」）
+    if (!best || sc > best.sc || gap < best.gap) best = { sc, gap, l1, l2 };
+  }
+  if (!best) return;
+  el.dataset.full = s;   // 区切りでスペースを落とすので、判定し直すときのために元の作品名を残す
+  el.replaceChildren(best.l1, document.createElement("br"), best.l2);
+  el.classList.add("split");
+}
+const titleIO = new IntersectionObserver(entries => {
+  const hits = entries.filter(e => e.isIntersecting).map(e => e.target);
+  hits.forEach(el => { titleIO.unobserve(el); splitTitle(el); });
+}, { rootMargin: "400px 0px" });
+function fitTitles(root) {
+  root.querySelectorAll(".poster .ttl").forEach(el => {
+    if (el.classList.contains("split")) { el.textContent = el.dataset.full; el.classList.remove("split"); }   // 判定し直す前に元の作品名へ
+    titleIO.observe(el);
+  });
+}
+function initTitleFit() {
+  const list = document.getElementById("list");
+  new MutationObserver(ms => ms.forEach(m => m.addedNodes.forEach(n => { if (n.nodeType === 1) fitTitles(n); })))
+    .observe(list, { childList: true, subtree: true });
+  let t;   // 列幅が変わったら判定し直す
+  addEventListener("resize", () => { clearTimeout(t); t = setTimeout(() => fitTitles(list), 200); });
+  document.fonts?.ready.then(() => fitTitles(list));   // Webフォント読込で文字幅が変わる分
 }
 
 /* ---------- score visibility ---------- */
