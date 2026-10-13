@@ -717,7 +717,7 @@
   <aside class="rail" id="rail">
     <div class="search">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>
-      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索…" data-tip="作品名・制作会社・声優・原作者で検索できます" oninput="onSearch()">
+      <input type="text" id="search" placeholder="作品名・制作会社・声優・原作者で検索…" data-tip="作品名・制作会社・声優・原作者で検索できます（「/」キーでここへ移動）" oninput="onSearch()">
     </div>
 
     <nav class="rail-views">
@@ -2926,6 +2926,25 @@ document.addEventListener("keydown", e => {
     const next = document.querySelector(`[data-fk="${fk}"]`);
     if (next) next.focus();
   }
+});
+// 「/」で検索欄へ、検索欄で Esc を押すと抜ける。文字入力中・変換中・入力画面やカレンダーを開いている間は何もしない。
+// 押した瞬間に移ると日本語入力オンのとき「/」が検索欄に入ってしまうので、キーを離したときに移る
+let slashPending = false;
+document.addEventListener("keydown", e => {
+  const search = document.getElementById("search");
+  if (e.target === search && e.key === "Escape") { search.blur(); return; }
+  if (e.key !== "/" || e.ctrlKey || e.altKey || e.metaKey || e.isComposing) return;
+  if (e.target.closest("input, textarea, select, [contenteditable]")) return;
+  if (epModalId != null || noteModalId != null || document.getElementById("cal-overlay").classList.contains("open")) return;
+  e.preventDefault();
+  slashPending = true;
+});
+document.addEventListener("keyup", () => {
+  if (!slashPending) return;
+  slashPending = false;
+  const search = document.getElementById("search");
+  search.focus();
+  search.select();
 });
 
 let ctxReturnFk = null;   // キーボードで開いたメニューを閉じたときにフォーカスを戻す作品（data-fk）
