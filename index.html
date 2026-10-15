@@ -3199,10 +3199,26 @@ function nextUnwatched(a) {
   const eps = epsOf(a.id);
   return (eps.length ? Math.max(...eps) : 0) + 1;
 }
+// ==NEXTUP-ORDER-BEGIN==
+// 「次に見る」の並び順。放送中・放送前の作品を放送カレンダー順（日→土、各曜日は放送時刻順）で先頭に、
+// 放送枠不明の放送中作品をその後、放送が終わった作品（追いかけ視聴）を最後に年降順で並べる。
+// 曜日は放送カレンダーと同じく実際の日付基準（土曜25:00 は日曜 01:00 として日曜に入る）。
+// x/y: {a, as(airStatus), slot(airSlot)}
+function nextUpCompare(x, y) {
+  const rank = o => (o.as === "airing" || o.as === "upcoming") ? (o.slot ? 0 : 1) : 2;
+  const rx = rank(x), ry = rank(y);
+  if (rx !== ry) return rx - ry;
+  if (rx === 0 && (x.slot.day !== y.slot.day || x.slot.mins !== y.slot.mins))
+    return x.slot.day - y.slot.day || x.slot.mins - y.slot.mins;
+  return (y.a.y || 0) - (x.a.y || 0) || (x.a.t < y.a.t ? -1 : x.a.t > y.a.t ? 1 : 0);
+}
+// ==NEXTUP-ORDER-END==
 function nextUpItems() {
   return catalog
     .filter(a => statusOf(a.id) === "watching" && nextUnwatched(a) !== null)
-    .sort((x, y) => (y.y || 0) - (x.y || 0) || (x.t < y.t ? -1 : 1));
+    .map(a => ({ a, as: airStatus(a), slot: airSlot(a) }))
+    .sort(nextUpCompare)
+    .map(o => o.a);
 }
 function nextUpHtml() {
   const items = nextUpItems();
