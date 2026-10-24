@@ -508,6 +508,8 @@
   .poster.cmp-mine::after { background: var(--cmp-mine); }
   .poster.cmp-theirs::after { background: var(--cmp-theirs); }
   .ctx-menu .ctx-hide.on { color: var(--accent-soft); }
+  .poster.listhidden { opacity: 0.38; }
+  .poster.listhidden:hover, .poster.listhidden:focus-visible { opacity: 0.85; }
   .ctx-menu .ctx-item.on { color: var(--accent-soft); }
 
   .foot-note { margin-top: 30px; text-align: center; color: var(--text-faint); font-size: 0.8rem; }
@@ -736,6 +738,7 @@
         <button class="chip dropped" data-f="dropped" onclick="setFilter('dropped')">視聴中止</button>
         <button class="chip maybe" data-f="maybe" onclick="setFilter('maybe')">多分視聴済</button>
         <button class="chip" data-f="unwatched" onclick="setFilter('unwatched')">未マーク</button>
+        <button class="chip" id="listhide-chip" onclick="toggleShowListHidden()" title="右クリック→「一覧から隠す」にした作品を薄く表示する">非表示</button>
         <button class="chip" id="unrated-chip" onclick="toggleUnrated()" title="評価（★）が未設定の作品だけに絞る。状態チップと組み合わせて使う">未評価</button>
       </div>
     </div>
@@ -820,6 +823,7 @@ const HISTORY_MAX = 5000;                 // 履歴の上限件数（肥大化�
 const SERIES_KEY = "animeTV.series.v1";   // シリーズ単位の「見たい」/「興味なし」localStorage キー
 const COMPARE_KEY = "animeTV.compare.v1"; // 比較相手の視聴データ { name, watch:{id:{s,ep,r}}, importedAt }
 const BEST9_KEY = "animeTV.best9.v1";     // アニメ9選（id配列・最大9件、並び=3×3グリッドの枠順）。※キー定数はここで定義（TDZ回避）
+const LISTHIDE_KEY = "animeTV.listhide.v1"; // 一覧から隠す作品 {id:1}。おすすめの「興味なし」(watch.x)とは別物
 const DEV_KEY = "animeTV.dev.v1";         // 開発者モード（裏コマンド）フラグ。"1"=ON
 const SEASON_JA = { WINTER: "冬", SPRING: "春", SUMMER: "夏", FALL: "秋", OVA: "OVA", MOVIE: "劇場アニメ" };
 const SEASON_CLS = { WINTER: "s-winter", SPRING: "s-spring", SUMMER: "s-summer", FALL: "s-fall", OVA: "s-ova", MOVIE: "s-movie" };
@@ -862,6 +866,8 @@ let collectionSort = "season";   // 視聴コレクション内の並び: "seaso
 let query = "";
 let statusFilter = new Set(STATUS_KEYS);   // 複数選択（既定: 全選択 = すべて）
 let formatFilter = new Set(FORMAT_KEYS);    // 複数選択（既定: 全選択 = すべて）
+let listHide = loadListHide();   // 「一覧から隠す」にした作品 {id:1}
+let showListHidden = false;      // 「非表示」チップ: ON の間は隠した作品も薄く表示する
 let unratedOnly = false;   // 「未評価」トグル: 状態フィルタと AND で、自己評価(★)未設定の作品だけに絞る
 let showScores = false;   // 評価値（★）の表示。デフォルト非表示
 let collapsedDecades = new Set(); // 折りたたみ中の年代（collection モード用、キー=10年区切りの開始年）
@@ -1114,6 +1120,28 @@ function saveSeries() {
   try { localStorage.setItem(SERIES_KEY, JSON.stringify(series)); }
   catch (e) { toastError("保存に失敗: " + e.message); }
 }
+/* ---------- 一覧から隠す ----------
+   見ないと決めた作品をクール一覧・マイページなどから消す。おすすめ候補からも外す。
+   「非表示」チップを ON にすると薄く表示され、右クリックで戻せる。検索結果には常に（薄く）出す。 */
+function loadListHide() {
+  try {
+    const r = localStorage.getItem(LISTHIDE_KEY);
+    if (r) { const o = JSON.parse(r); if (o && typeof o === "object" && !Array.isArray(o)) return o; }
+  } catch (e) { console.error(e); }
+  return {};
+}
+function saveListHide() {
+  try { localStorage.setItem(LISTHIDE_KEY, JSON.stringify(listHide)); }
+  catch (e) { toastError("保存に失敗: " + e.message); }
+}
+function isListHidden(id) { return !!listHide[id]; }
+function toggleListHide(id) {
+  const next = { ...listHide };
+  if (next[id]) delete next[id]; else next[id] = 1;
+  listHide = next;
+  saveListHide();
+}
+function listHiddenCount() { return Object.keys(listHide).length; }
 /* ---------- アニメ9選の永続化 ----------
    best9 = 選んだ作品idの配列（最大9件、並び順=3×3グリッドの枠順）。
    ※ BEST9_KEY は WATCH_KEY 隣で定義（初期化時参照の TDZ 回避、SERIES_KEY と同じ理由）。 */
@@ -1605,6 +1633,16 @@ function setFilter(f) {
   syncChips("filters", "f", statusFilter, STATUS_KEYS);
   render();
 }
+function toggleShowListHidden() {
+  showListHidden = !showListHidden;
+  render();
+}
+function syncListHideChip() {
+  const chip = document.getElementById("listhide-chip");
+  const n = listHiddenCount();
+  chip.textContent = n ? `非表示 ${n}` : "非表示";
+  chip.classList.toggle("active", showListHidden);
+}
 function toggleUnrated() {
   unratedOnly = !unratedOnly;
   render();
@@ -1719,6 +1757,7 @@ function onSearch() {
 // 状態フィルタと形式フィルタをまとめて適用（render の全分岐で使用）
 function passStatus(a) {
   if (!formatFilter.has(a.f)) return false;
+  if (isListHidden(a.id) && !showListHidden && !query) return false;   // 一覧から隠した作品（検索では出す）
   const unrated = unratedOnly && !unratedIgnored();
   if (unrated && ratingOf(a.id) > 0) return false;
   if (unrated && statusFilter.size === 0) return true;   // 状態を何も選ばず「未評価」だけ ON → 状態は問わない
@@ -1811,6 +1850,7 @@ function currentlyAiring() {
   const seen = new Map();
   for (const a of catalog) {
     if (a.f !== "TV" && a.f !== "SHORT") continue;
+    if (isListHidden(a.id)) continue;   // 一覧から隠した作品は放送表・カレンダー・.ics にも出さない
     const startsNow = a.y === cc.year && a.s === cc.season;
     const tail = a.ed && a.ed >= today && startedBefore(a, cc) && courCount(a.ep) < 4;
     if (startsNow || tail) seen.set(a.id, a);
@@ -2231,6 +2271,7 @@ async function exportBest9() {
 /* ---------- main render ---------- */
 function render() {
   syncUnratedChip();
+  syncListHideChip();
   renderStats();
   renderContextPanel();
   const list = document.getElementById("list");
@@ -2563,7 +2604,7 @@ function renderReco(list) {
   const { aff, seeds } = buildTasteProfile();
   // 候補は「未視聴かつ興味なしでない」のみ。状態フィルタは無意味なので形式フィルタのみ尊重。
   // シリーズごと興味なし(hide)は除外。シリーズ「見たい」(want)は視聴決定済みなのでおすすめ候補から外す。
-  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && !isSeriesHidden(a) && !isSeriesWanted(a) && formatFilter.has(a.f));
+  const candidates = catalog.filter(a => statusOf(a.id) === "unwatched" && !isHidden(a.id) && !isListHidden(a.id) && !isSeriesHidden(a) && !isSeriesWanted(a) && formatFilter.has(a.f));
   const hasProfile = ["g", "src", "st", "au"].some(ax => Object.keys(aff[ax]).length);
   const toggleBit = (hiddenItems.length ? " " + hideToggle : "") + (seriesHiddenItems.length ? " " + seriesHideToggle : "");
 
@@ -2785,7 +2826,7 @@ function posterHtml(a, continuing) {
       : `<span class="cmp-them none">${esc(compare.name)}: —</span>`;
     cmpRow = `<div class="cmp-row">${meBit}${themBit}</div>`;
   }
-  return `<article class="poster ${st}${cmpClass}" tabindex="0" role="button" aria-label="${esc(a.t)}（${STATUS_JA[st] || "未マーク"}）" data-fk="p${a.id}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()" onfocus="showInfo(event,${a.id})" onblur="hideInfo()">
+  return `<article class="poster ${st}${cmpClass}${isListHidden(a.id) ? " listhidden" : ""}" tabindex="0" role="button" aria-label="${esc(a.t)}（${STATUS_JA[st] || "未マーク"}）" data-fk="p${a.id}" onclick="cycle(${a.id})" oncontextmenu="return showCtxMenu(event,${a.id})" onmouseenter="showInfo(event,${a.id})" onmouseleave="hideInfo()" onfocus="showInfo(event,${a.id})" onblur="hideInfo()">
     ${img}
     ${a.sc ? `<span class="score">★${(a.sc / 10).toFixed(1)}</span>` : `<span class="score noscore">★-.-</span>`}
     <button class="pinfo" type="button" onclick="pinInfo(event,${a.id})" aria-label="作品情報を表示">${ic("info")}</button>
@@ -2875,6 +2916,7 @@ function ctxInner(a) {
     <div class="ctx-states">${states}</div>
     ${epRow}
     ${noteRow}
+    <div class="ctx-item ctx-hide ${isListHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickListHide(${id})">${isListHidden(id) ? ic("check") + " 一覧に戻す" : ic("ban") + " 一覧から隠す"}</div>
     ${(view.mode === "reco" || view.mode === "series") ? `
     <div class="ctx-item ctx-hide ${isHidden(id) ? "on" : ""}" onclick="event.stopPropagation();pickHidden(${id})">${isHidden(id) ? ic("check") + " おすすめに表示する" : ic("ban") + " おすすめに出さない"}</div>
     <div class="ctx-item ${isSeriesWanted(a) ? "on" : ""}" onclick="event.stopPropagation();pickSeriesWant(${id})">${isSeriesWanted(a) ? ic("check") + " シリーズを見たいリストから解除" : ic("tv") + " シリーズを見たいリストに追加"}</div>
@@ -3000,6 +3042,13 @@ function pickHidden(id) {
   updatePoster(id); rebuildCtx(id);
   if (view.mode === "reco") render();   // おすすめ一覧／興味なし一覧に即時反映
   toast(nowHidden ? "おすすめに出さない にしました" : "おすすめに戻しました");
+}
+function pickListHide(id) {
+  toggleListHide(id);
+  const now = isListHidden(id);
+  hideCtxMenu();
+  render();
+  toast(now ? "一覧から隠しました（「非表示」チップで確認・戻せます）" : "一覧に戻しました");
 }
 // シリーズを「見たいリスト」に追加／解除。
 function pickSeriesWant(id) {
@@ -3706,7 +3755,7 @@ function exportData(format) {
   const date = new Date().toISOString().slice(0, 10);
   if (format === "json") {
     // watch（視聴状態・評価・感想）と history（タイムライン）をまとめて書き出す。
-    const bundle = { v: 2, exportedAt: new Date().toISOString(), watch, history };
+    const bundle = { v: 2, exportedAt: new Date().toISOString(), watch, history, listHide };
     const blob = new Blob([JSON.stringify(bundle, null, 2)], { type: "application/json" });
     saveFile(blob, `anime-watch-${date}.json`, "JSONで書き出しました");
   } else if (format === "csv") {
@@ -3755,6 +3804,7 @@ function importWatch() {
         if (!confirm("現在の視聴データを読み込んだ内容で置き換えます。よろしいですか？")) return;
         watch = migrateWatch(rawWatch); saveWatch();
         if (Array.isArray(parsed.history)) { history = parsed.history.filter(e => e && e.id != null && e.t); saveHistory(); }
+        if (parsed.listHide && typeof parsed.listHide === "object" && !Array.isArray(parsed.listHide)) { listHide = { ...parsed.listHide }; saveListHide(); }
         render();
         toast("読み込みました");
       } catch (e) { toastError("読み込み失敗: " + e.message); }
