@@ -319,7 +319,7 @@
      年=「◯◯年代」を1段＋2列（年ボタンは少し低く・小さめの文字。端数は同じ大きさのまま左詰め） */
   @media (min-width: 901px) {
     #filters, #formatfilters { display: grid; grid-template-columns: 1fr 1fr; }
-    #formatfilters .chip[data-ff="all"] { grid-column: 1 / -1; }
+    #filters .chip[data-f="all"], #formatfilters .chip[data-ff="all"] { grid-column: 1 / -1; }
     #filters .chip, #formatfilters .chip { text-align: center; padding-left: 6px; padding-right: 6px; }
     .rail-dec-years { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 7px; padding-left: 0; }
     .rail-dec-years .ytab:not(.dec-all) { padding-top: 4px; padding-bottom: 4px; font-size: 0.76rem; }
